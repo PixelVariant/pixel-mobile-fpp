@@ -7,5 +7,13 @@
   "srcURL": "https://github.com/PixelVariant/pixel-mobile-fpp.git",
   "bugUrl": "https://github.com/PixelVariant/pixel-mobile-fpp/issues",
   "version": "1.0.0",
-  "allowUpdates": 1
+  "allowUpdates": 1,
+  "versions": [
+		{
+			"minFPPVersion": "9.0",
+			"maxFPPVersion": "0",
+			"branch": "main",
+			"sha": ""
+		}
+	]
 }
