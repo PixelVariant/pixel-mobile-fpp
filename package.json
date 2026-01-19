@@ -1,0 +1,13 @@
+{
+  "name": "fpp-plugin-ddp-mobile",
+  "version": "1.0.0",
+  "description": "FPP plugin for DDP Mobile cloud connector",
+  "main": "ddp-cloud-connector.js",
+  "scripts": {
+    "start": "node ddp-cloud-connector.js"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.2",
+    "axios": "^1.6.0"
+  }
+}
