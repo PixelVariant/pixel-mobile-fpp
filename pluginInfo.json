@@ -4,6 +4,7 @@
   "author": "DDP Mobile Team",
   "description": "Forwards E1.31 lighting data to DDP Mobile cloud platform for audience participation",
   "homeUrl": "https://github.com/PixelVariant/pixel-mobile-fpp",
+  "srcURL": "https://github.com/PixelVariant/pixel-mobile-fpp.git",
   "bugUrl": "https://github.com/PixelVariant/pixel-mobile-fpp/issues",
   "version": "1.0.0",
   "allowUpdates": 1
