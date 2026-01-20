@@ -204,6 +204,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <option value="">-- Use Universe Channels 1-33 --</option>
             </select>
             <div class="help-text">Select an FPP model/element to use for data. If selected, universe setting is ignored.</div>
+            <button type="button" class="btn-auto-config" onclick="autoConfigureMQTT()" style="margin-top: 10px; padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                🔧 Auto-Configure MQTT Outputs for Selected Model
+            </button>
+            <div id="auto-config-status" style="margin-top: 10px; padding: 10px; border-radius: 5px; display: none;"></div>
         </div>
         
         <button type="submit" class="btn-save">💾 Save Settings</button>
@@ -245,4 +249,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     // Load models when page loads
     loadModels();
+    
+    // Auto-configure MQTT outputs based on selected model
+    async function autoConfigureMQTT() {
+        const statusDiv = document.getElementById('auto-config-status');
+        const modelName = document.getElementById('modelName').value;
+        
+        if (!modelName) {
+            statusDiv.style.display = 'block';
+            statusDiv.style.backgroundColor = '#fbbf24';
+            statusDiv.style.color = '#78350f';
+            statusDiv.textContent = '⚠️ Please select a model first';
+            return;
+        }
+        
+        const fppHost = document.getElementById('fppHost').value || '127.0.0.1';
+        const mqttBroker = document.getElementById('mqttBroker').value;
+        const mqttUsername = document.getElementById('mqttUsername').value;
+        const mqttPassword = document.getElementById('mqttPassword').value;
+        const mqttTopicColor = document.getElementById('mqttTopicColor').value;
+        const mqttTopicPixels = document.getElementById('mqttTopicPixels').value;
+        
+        statusDiv.style.display = 'block';
+        statusDiv.style.backgroundColor = '#3b82f6';
+        statusDiv.style.color = 'white';
+        statusDiv.textContent = '🔄 Configuring MQTT outputs...';
+        
+        try {
+            const response = await fetch('auto-configure-mqtt.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    modelName,
+                    fppHost,
+                    mqttBroker,
+                    mqttUsername,
+                    mqttPassword,
+                    mqttTopicColor,
+                    mqttTopicPixels
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                statusDiv.style.backgroundColor = '#4ade80';
+                statusDiv.style.color = 'white';
+                statusDiv.innerHTML = `✅ ${result.message}<br><small>Created ${result.details.outputsCreated} outputs (${result.details.numPixels} pixels) starting at channel ${result.details.startChannel}</small>`;
+            } else {
+                statusDiv.style.backgroundColor = '#ef4444';
+                statusDiv.style.color = 'white';
+                statusDiv.textContent = `❌ ${result.message}`;
+            }
+        } catch (error) {
+            statusDiv.style.backgroundColor = '#ef4444';
+            statusDiv.style.color = 'white';
+            statusDiv.textContent = `❌ Error: ${error.message}`;
+        }
+    }
 </script>
