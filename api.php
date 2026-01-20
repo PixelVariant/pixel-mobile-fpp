@@ -3,6 +3,13 @@
  * API endpoint for AJAX requests - bypasses FPP template wrapper
  */
 
+$action = $_GET['action'] ?? $_POST['action'] ?? '';
+
+// Only handle our specific action, otherwise don't output anything
+if ($action !== 'auto-configure-mqtt') {
+    return;
+}
+
 // Clean any previous output
 if (ob_get_level()) {
     ob_end_clean();
@@ -10,8 +17,6 @@ if (ob_get_level()) {
 
 header('Content-Type: application/json');
 header('Cache-Control: no-cache, must-revalidate');
-
-$action = $_GET['action'] ?? $_POST['action'] ?? '';
 
 if ($action === 'auto-configure-mqtt') {
     // Get POST data
@@ -157,8 +162,4 @@ if ($action === 'auto-configure-mqtt') {
             'outputsRemoved' => count($channelOutputs) - count($outputsToKeep)
         ]
     ]);
-    exit;
 }
-
-echo json_encode(['success' => false, 'message' => 'Invalid action']);
-exit;

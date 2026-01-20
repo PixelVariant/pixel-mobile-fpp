@@ -154,5 +154,3 @@ echo json_encode([
         'outputsRemoved' => count($channelOutputs) - count($outputsToKeep)
     ]
 ]);
-    ]
-]);
