@@ -47,7 +47,7 @@ const API_KEY = settings.apiKey;
 // FPP MQTT configuration
 const MQTT_BROKER = settings.mqttBroker || `mqtt://${settings.fppHost || '127.0.0.1'}:1883`;
 const MQTT_TOPIC_COLOR = settings.mqttTopicColor || 'falcon/player/FPP/channel/output/color';
-const MQTT_TOPIC_PIXELS = settings.mqttTopicPixels || 'falcon/player/FPP/pixel/#';
+const MQTT_TOPIC_PIXELS = settings.mqttTopicPixels || 'falcon/player/FPP/mobileLights/pixel/#';
 const FPP_HOST = settings.fppHost || '127.0.0.1';
 const FORWARD_INTERVAL = 40; // Forward data every 40ms (~25 FPS)
 
@@ -272,7 +272,7 @@ function processMQTTMessage(topic, message) {
             b = data.b || data.B || 0;
         }
         
-        // Check if this is a pixel topic (e.g., falcon/player/FPP/pixel/1)
+        // Check if this is a pixel topic (e.g., falcon/player/FPP/mobileLights/pixel/1)
         const pixelMatch = topic.match(/pixel\/(\d+)$/);
         
         if (pixelMatch) {
@@ -283,12 +283,22 @@ function processMQTTMessage(topic, message) {
                 latestChannelData[offset] = r;
                 latestChannelData[offset + 1] = g;
                 latestChannelData[offset + 2] = b;
+                
+                // Log first few messages for debugging
+                if (stats.packetsReceived < 5) {
+                    console.log(`Pixel ${pixelIndex + 1} data: RGB(${r}, ${g}, ${b}) -> channels ${offset}-${offset+2}`);
+                }
             }
         } else {
             // This is the main color topic - store in channels 0-2
             latestChannelData[0] = r;
             latestChannelData[1] = g;
             latestChannelData[2] = b;
+            
+            // Log first few messages for debugging
+            if (stats.packetsReceived < 5) {
+                console.log(`Main color data: RGB(${r}, ${g}, ${b}) -> channels 0-2`);
+            }
         }
         
         // For now, pixels (channels 3-32) remain zeros
@@ -326,10 +336,10 @@ function startDataForwarder() {
     console.log('    Payload: %R%,%G%,%B%');
     console.log('  ');
     console.log('  Pixels (10 outputs):');
-    console.log('    Pixel 1 (channels 9491-9493): falcon/player/FPP/pixel/1');
-    console.log('    Pixel 2 (channels 9494-9496): falcon/player/FPP/pixel/2');
+    console.log('    Pixel 1 (channels 9491-9493): falcon/player/FPP/mobileLights/pixel/1');
+    console.log('    Pixel 2 (channels 9494-9496): falcon/player/FPP/mobileLights/pixel/2');
     console.log('    ...');
-    console.log('    Pixel 10 (channels 9518-9520): falcon/player/FPP/pixel/10');
+    console.log('    Pixel 10 (channels 9518-9520): falcon/player/FPP/mobileLights/pixel/10');
     console.log('='.repeat(60) + '\n');
     
     // Connect to FPP's MQTT broker
