@@ -13,8 +13,11 @@ let settings = {
     mqttBroker: '',
     mqttUsername: '',
     mqttPassword: '',
-    mqttTopicColor: 'mobileLights',  // Single color topic for cloud-display.html
-    mqttTopicPixels: 'falcon/player/FPP/mobileLights/pixel/#',  // Wildcard for pixels for cloud-pixels.html (e.g., falcon/player/FPP/mobileLights/pixel/1, pixel/2, etc.)
+    mqttTopicColor: 'mobileLights',
+    mqttTopicPixels: 'falcon/player/FPP/mobileLights/pixel/#',
+    cloudMqttBroker: 'mqtt://192.168.83.45:1883',
+    cloudMqttUsername: '',
+    cloudMqttPassword: '',
     enabled: false
 };
 
@@ -44,15 +47,24 @@ const API_SERVER_URL = settings.cloudServerUrl.replace(':3002', ':3001');
 const CLOUD_SERVER_URL = settings.cloudServerUrl;
 const API_KEY = settings.apiKey;
 
-// FPP MQTT configuration
-const MQTT_BROKER = settings.mqttBroker || `mqtt://${settings.fppHost || '127.0.0.1'}:1883`;
-const MQTT_TOPIC_COLOR = settings.mqttTopicColor || 'mobileLights';
-const MQTT_TOPIC_PIXELS = settings.mqttTopicPixels || 'falcon/player/FPP/mobileLights/pixel/#';
+// FPP MQTT configuration (local broker - user's existing setup)
+const LOCAL_MQTT_BROKER = settings.mqttBroker || `mqtt://${settings.fppHost || '127.0.0.1'}:1883`;
+const LOCAL_MQTT_TOPIC_COLOR = settings.mqttTopicColor || 'mobileLights';
+const LOCAL_MQTT_TOPIC_PIXELS = settings.mqttTopicPixels || 'falcon/player/FPP/mobileLights/pixel/#';
+
+// Cloud MQTT configuration (your cloud broker)
+// Uses token as username and API key as password automatically
+const CLOUD_MQTT_BROKER = settings.cloudMqttBroker || 'mqtt://192.168.83.45:1883';
+let CLOUD_MQTT_USERNAME = '';  // Will be set to token after initialization
+let CLOUD_MQTT_PASSWORD = API_KEY;  // API key is the password
+
 const FPP_HOST = settings.fppHost || '127.0.0.1';
 const FORWARD_INTERVAL = 40; // Forward data every 40ms (~25 FPS)
 
 let showToken = null;
 let cloudSocket = null;
+let localMqttClient = null;
+let cloudMqttClient = null;
 let stats = {
     packetsReceived: 0,
     packetsSent: 0,
@@ -109,6 +121,9 @@ async function initialize() {
         
         showToken = response.data.token;
         console.log(`✓ API key validated. Show token: ${showToken}`);
+        
+        // Set cloud MQTT username to token
+        CLOUD_MQTT_USERNAME = showToken;
         
         // Get MQTT broker from FPP if not configured
         if (!settings.mqttBroker || settings.mqttBroker.trim() === '') {
@@ -172,17 +187,16 @@ function connectToCloud() {
     });
 }
 
-// Store latest channel data from FPP MQTT
+// Store latest channel data from local MQTT
 let latestChannelData = new Array(512).fill(0);
 let lastDataTime = 0;
-let mqttClient = null;
 
-// Connect to FPP's MQTT broker and subscribe to channel data
-function connectToFPPMQTT() {
-    const brokerUrl = global.MQTT_BROKER_OVERRIDE || MQTT_BROKER;
+// Connect to local FPP MQTT broker and subscribe to channel data
+function connectToLocalMQTT() {
+    const brokerUrl = global.MQTT_BROKER_OVERRIDE || LOCAL_MQTT_BROKER;
     
-    console.log(`Connecting to FPP MQTT broker at ${brokerUrl}...`);
-    console.log(`Will subscribe to topics: ${MQTT_TOPIC_COLOR} and ${MQTT_TOPIC_PIXELS}`);
+    console.log(`Connecting to local FPP MQTT broker at ${brokerUrl}...`);
+    console.log(`Will subscribe to topics: ${LOCAL_MQTT_TOPIC_COLOR} and ${LOCAL_MQTT_TOPIC_PIXELS}`);
     
     const mqttOptions = {
         reconnectPeriod: 5000,
@@ -192,62 +206,93 @@ function connectToFPPMQTT() {
     // Add authentication if provided
     if (settings.mqttUsername) {
         mqttOptions.username = settings.mqttUsername;
-        console.log(`Using MQTT authentication (username: ${settings.mqttUsername})`);
+        console.log(`Using local MQTT authentication (username: ${settings.mqttUsername})`);
     }
     if (settings.mqttPassword) {
         mqttOptions.password = settings.mqttPassword;
     }
     
-    mqttClient = mqtt.connect(brokerUrl, mqttOptions);
+    localMqttClient = mqtt.connect(brokerUrl, mqttOptions);
     
-    mqttClient.on('connect', () => {
-        console.log('✓ Connected to FPP MQTT broker');
+    localMqttClient.on('connect', () => {
+        console.log('✓ Connected to local FPP MQTT broker');
         
         // Subscribe to color topic
-        mqttClient.subscribe(MQTT_TOPIC_COLOR, (err) => {
+        localMqttClient.subscribe(LOCAL_MQTT_TOPIC_COLOR, (err) => {
             if (err) {
-                console.error('Failed to subscribe to color topic:', err.message);
+                console.error('Failed to subscribe to local color topic:', err.message);
             } else {
-                console.log(`✓ Subscribed to ${MQTT_TOPIC_COLOR}`);
+                console.log(`✓ Subscribed to ${LOCAL_MQTT_TOPIC_COLOR}`);
             }
         });
         
         // Subscribe to pixel topics (wildcard)
-        mqttClient.subscribe(MQTT_TOPIC_PIXELS, (err) => {
+        localMqttClient.subscribe(LOCAL_MQTT_TOPIC_PIXELS, (err) => {
             if (err) {
-                console.error('Failed to subscribe to pixel topics:', err.message);
+                console.error('Failed to subscribe to local pixel topics:', err.message);
             } else {
-                console.log(`✓ Subscribed to ${MQTT_TOPIC_PIXELS}`);
+                console.log(`✓ Subscribed to ${LOCAL_MQTT_TOPIC_PIXELS}`);
             }
         });
     });
     
-    mqttClient.on('message', (topic, message) => {
+    localMqttClient.on('message', (topic, message) => {
         try {
-            processMQTTMessage(topic, message.toString());
+            processLocalMQTTMessage(topic, message.toString());
         } catch (error) {
-            console.error('Error processing MQTT message:', error.message);
+            console.error('Error processing local MQTT message:', error.message);
             stats.errors++;
         }
     });
     
-    mqttClient.on('error', (error) => {
-        console.error(`MQTT connection error: ${error.message}`);
+    localMqttClient.on('error', (error) => {
+        console.error(`Local MQTT connection error: ${error.message}`);
         stats.errors++;
     });
     
-    mqttClient.on('close', () => {
-        console.log('MQTT connection closed. Will attempt to reconnect...');
+    localMqttClient.on('close', () => {
+        console.log('Local MQTT connection closed. Will attempt to reconnect...');
     });
     
-    mqttClient.on('reconnect', () => {
-        console.log('Reconnecting to MQTT broker...');
+    localMqttClient.on('reconnect', () => {
+        console.log('Reconnecting to local MQTT broker...');
     });
 }
 
-// Process MQTT message from FPP
-// FPP MQTT output format: "R,G,B" or custom payload pattern
-function processMQTTMessage(topic, message) {
+// Connect to cloud MQTT broker for bridging
+function connectToCloudMQTT() {
+    console.log(`Connecting to cloud MQTT broker at ${CLOUD_MQTT_BROKER}...`);
+    
+    const mqttOptions = {
+        reconnectPeriod: 5000,
+        connectTimeout: 10000,
+        username: CLOUD_MQTT_USERNAME,
+        password: CLOUD_MQTT_PASSWORD
+    };
+    
+    cloudMqttClient = mqtt.connect(CLOUD_MQTT_BROKER, mqttOptions);
+    
+    cloudMqttClient.on('connect', () => {
+        console.log('✓ Connected to cloud MQTT broker');
+        console.log(`  Publishing to: shows/${showToken}/color and shows/${showToken}/pixels/#`);
+    });
+    
+    cloudMqttClient.on('error', (error) => {
+        console.error(`Cloud MQTT connection error: ${error.message}`);
+        stats.errors++;
+    });
+    
+    cloudMqttClient.on('close', () => {
+        console.log('Cloud MQTT connection closed. Will attempt to reconnect...');
+    });
+    
+    cloudMqttClient.on('reconnect', () => {
+        console.log('Reconnecting to cloud MQTT broker...');
+    });
+}
+
+// Process local MQTT message and bridge to cloud
+function processLocalMQTTMessage(topic, message) {
     try {
         // Parse RGB values from message
         let r = 0, g = 0, b = 0;
@@ -284,6 +329,12 @@ function processMQTTMessage(topic, message) {
                 latestChannelData[offset + 1] = g;
                 latestChannelData[offset + 2] = b;
                 
+                // Bridge to cloud MQTT
+                if (cloudMqttClient && cloudMqttClient.connected) {
+                    const cloudTopic = `shows/${showToken}/pixels/${pixelIndex + 1}`;
+                    cloudMqttClient.publish(cloudTopic, message);
+                }
+                
                 // Log first few messages for debugging
                 if (stats.packetsReceived < 5) {
                     console.log(`Pixel ${pixelIndex + 1} data: RGB(${r}, ${g}, ${b}) -> channels ${offset}-${offset+2}`);
@@ -294,6 +345,12 @@ function processMQTTMessage(topic, message) {
             latestChannelData[0] = r;
             latestChannelData[1] = g;
             latestChannelData[2] = b;
+            
+            // Bridge to cloud MQTT
+            if (cloudMqttClient && cloudMqttClient.connected) {
+                const cloudTopic = `shows/${showToken}/color`;
+                cloudMqttClient.publish(cloudTopic, message);
+            }
             
             // Log first few messages for debugging
             if (stats.packetsReceived < 5) {
@@ -342,10 +399,13 @@ function startDataForwarder() {
     console.log('    Pixel 10 (channels 9518-9520): falcon/player/FPP/mobileLights/pixel/10');
     console.log('='.repeat(60) + '\n');
     
-    // Connect to FPP's MQTT broker
-    connectToFPPMQTT();
+    // Connect to local FPP MQTT broker
+    connectToLocalMQTT();
     
-    // Forward data to cloud periodically
+    // Connect to cloud MQTT broker for bridging
+    connectToCloudMQTT();
+    
+    // Forward data to cloud WebSocket periodically
     setInterval(() => {
         try {
             // Check if we've received data recently (within last 2 seconds)
