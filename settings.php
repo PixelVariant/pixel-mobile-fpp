@@ -276,7 +276,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         statusDiv.textContent = '🔄 Configuring MQTT outputs...';
         
         try {
-            const response = await fetch('/plugin.php?_menu=status&plugin=pixel-mobile-fpp&page=auto-configure-mqtt.php', {
+            const response = await fetch('/plugin.php?_menu=status&plugin=pixel-mobile-fpp&page=api.php&action=auto-configure-mqtt&nopage=1', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

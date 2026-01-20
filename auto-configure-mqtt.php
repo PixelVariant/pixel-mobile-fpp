@@ -3,7 +3,13 @@
  * Auto-configure MQTT outputs in FPP based on selected model
  */
 
+// Prevent FPP from wrapping this in HTML
+if (php_sapi_name() !== 'cli') {
+    ob_clean();
+}
+
 header('Content-Type: application/json');
+header('Cache-Control: no-cache, must-revalidate');
 
 // Get POST data
 $data = json_decode(file_get_contents('php://input'), true);
