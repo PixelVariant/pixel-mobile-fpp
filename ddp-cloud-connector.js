@@ -137,57 +137,67 @@ function connectToCloud() {
     });
 }
 
-// Start E1.31 UDP receiver
-function startE131Receiver() {
-    const udpSocket = dgram.createSocket('udp4');
+// Read channel data from FPP's shared memory
+function readChannelData() {
+    try {
+        // Calculate byte offset for this universe
+        const universeOffset = (UNIVERSE - 1) * UNIVERSE_SIZE;
+        
+        // Read the channel data file
+        const fd = fs.openSync(CHANNEL_DATA_FILE, 'r');
+        const buffer = Buffer.alloc(UNIVERSE_SIZE);
+        fs.readSync(fd, buffer, 0, UNIVERSE_SIZE, universeOffset);
+        fs.closeSync(fd);
+        
+        return buffer;
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            console.error('Error reading channel data:', error.message);
+            stats.errors++;
+        }
+        return null;
+    }
+}
+
+// Start polling FPP channel data
+function startChannelDataReader() {
+    console.log('\n' + '='.repeat(60));
+    console.log('DDP MOBILE CLOUD CONNECTOR (FPP PLUGIN)');
+    console.log('='.repeat(60));
+    console.log(`Reading from: ${CHANNEL_DATA_FILE}`);
+    console.log(`Target universe: ${UNIVERSE}`);
+    console.log(`Show token: ${showToken}`);
+    console.log(`Cloud server: ${CLOUD_SERVER_URL}`);
+    console.log(`Polling interval: ${POLL_INTERVAL}ms`);
+    console.log('='.repeat(60) + '\n');
     
-    udpSocket.on('error', (err) => {
-        console.error('UDP socket error:', err);
-        stats.errors++;
-        saveStats();
-    });
-    
-    udpSocket.on('message', (msg, rinfo) => {
+    setInterval(() => {
         try {
-            // Validate E1.31 packet
-            if (msg.length < 126) {
-                return;
-            }
-            
-            // Check ACN identifier
-            const acnId = msg.toString('ascii', 4, 16);
-            if (acnId !== 'ASC-E1.17\0\0\0') {
-                return;
-            }
-            
-            // Get universe
-            const universe = msg.readUInt16BE(113);
-            if (universe !== UNIVERSE) {
+            const channelData = readChannelData();
+            if (!channelData) {
                 return;
             }
             
             stats.packetsReceived++;
             
-            // Extract DMX data
-            const dmxDataOffset = 126;
-            
             // Extract single color (channels 1-3)
-            const r = msg[dmxDataOffset + SINGLE_COLOR_CHANNEL - 1] || 0;
-            const g = msg[dmxDataOffset + SINGLE_COLOR_CHANNEL] || 0;
-            const b = msg[dmxDataOffset + SINGLE_COLOR_CHANNEL + 1] || 0;
+            const r = channelData[SINGLE_COLOR_CHANNEL - 1];
+            const g = channelData[SINGLE_COLOR_CHANNEL - 1 + 1];
+            const b = channelData[SINGLE_COLOR_CHANNEL - 1 + 2];
             
             // Extract 10 pixels (channels 4-33)
             const pixels = [];
+            const pixelsOffset = PIXELS_START_CHANNEL - 1;
             for (let i = 0; i < NUM_PIXELS; i++) {
-                const pixelOffset = dmxDataOffset + PIXELS_START_CHANNEL - 1 + (i * 3);
+                const offset = pixelsOffset + (i * 3);
                 pixels.push({
-                    r: msg[pixelOffset] || 0,
-                    g: msg[pixelOffset + 1] || 0,
-                    b: msg[pixelOffset + 2] || 0
+                    r: channelData[offset],
+                    g: channelData[offset + 1],
+                    b: channelData[offset + 2]
                 });
             }
             
-            // Send to cloud server
+            // Send to cloud via Socket.io
             if (cloudSocket && cloudSocket.connected) {
                 cloudSocket.emit('lighting-data', {
                     apiKey: API_KEY,
@@ -199,24 +209,10 @@ function startE131Receiver() {
             }
             
         } catch (error) {
-            console.error('Packet processing error:', error.message);
+            console.error('Channel data processing error:', error.message);
             stats.errors++;
         }
-    });
-    
-    udpSocket.on('listening', () => {
-        const address = udpSocket.address();
-        console.log('\n' + '='.repeat(60));
-        console.log('DDP MOBILE CLOUD CONNECTOR (FPP PLUGIN)');
-        console.log('='.repeat(60));
-        console.log(`E1.31 listening on ${address.address}:${address.port}`);
-        console.log(`Target universe: ${UNIVERSE}`);
-        console.log(`Show token: ${showToken}`);
-        console.log(`Cloud server: ${CLOUD_SERVER_URL}`);
-        console.log('='.repeat(60) + '\n');
-    });
-    
-    udpSocket.bind(E131_PORT);
+    }, POLL_INTERVAL);
 }
 
 // Stats reporting and saving
