@@ -41,8 +41,8 @@ const API_KEY = settings.apiKey;
 const UNIVERSE = parseInt(settings.universe);
 const MODEL_NAME = settings.modelName || '';
 
-// E1.31 Listener configuration
-const E131_PORT = 5569;  // Use alternate port (5568 is used by FPP)
+// DDP Listener configuration
+const DDP_PORT = 4048;  // Standard DDP port
 const POLL_INTERVAL = 40; // Process data every 40ms (~25 FPS)
 
 let showToken = null;
@@ -135,11 +135,11 @@ function connectToCloud() {
     });
 }
 
-// Store latest channel data from E1.31
+// Store latest channel data from DDP
 let latestChannelData = new Array(512).fill(0);
 let lastPacketTime = 0;
 
-// Create UDP socket to listen for E1.31 data
+// Create UDP socket to listen for DDP data
 const udpSocket = dgram.createSocket('udp4');
 
 udpSocket.on('error', (err) => {
@@ -149,64 +149,69 @@ udpSocket.on('error', (err) => {
 
 udpSocket.on('message', (msg, rinfo) => {
     try {
-        // E1.31 packet structure (simplified)
-        // Bytes 0-17: RLP Preamble
-        // Bytes 18-37: Frame Layer
-        // Bytes 38-115: DMP Layer
-        // Bytes 116+: DMX data (1 byte start code + 512 bytes channel data)
+        // DDP packet structure:
+        // Byte 0: Flags (0x01 = VER1, 0x10 = PUSH, 0x04 = TIMECODE, 0x08 = STORAGE, 0x02 = REPLY)
+        // Byte 1: Sequence number
+        // Byte 2: Data type (0x01 = RGB)
+        // Byte 3: Destination ID
+        // Bytes 4-7: Offset (starting channel, 32-bit little-endian)
+        // Bytes 8-9: Data length (16-bit little-endian)
+        // Bytes 10+: Pixel data (RGB triplets)
         
-        if (msg.length < 126) return; // Minimum E1.31 packet size
+        if (msg.length < 10) return; // Minimum DDP packet size
         
-        // Check for E1.31 packet (ASC-E1.17)
-        const vector = msg.readUInt32BE(18);
-        if (vector !== 0x00000004) return; // Not E1.31 DATA packet
+        const flags = msg[0];
+        const dataType = msg[2];
         
-        // Get universe number
-        const packetUniverse = msg.readUInt16BE(113);
+        // Check for DDP data packet (RGB)
+        if (dataType !== 0x01) return;
         
-        // Only process our target universe
-        if (packetUniverse !== UNIVERSE) return;
+        // Get offset (starting channel, 0-indexed)
+        const offset = msg.readUInt32LE(4);
         
-        // DMX data starts at byte 126 (after start code at 125)
-        const dmxData = msg.slice(126);
+        // Get data length
+        const dataLength = msg.readUInt16LE(8);
+        
+        // Extract pixel data
+        const pixelData = msg.slice(10, 10 + dataLength);
         
         // Update our channel data buffer
-        for (let i = 0; i < Math.min(512, dmxData.length); i++) {
-            latestChannelData[i] = dmxData[i];
+        for (let i = 0; i < pixelData.length && (offset + i) < 512; i++) {
+            latestChannelData[offset + i] = pixelData[i];
         }
         
         lastPacketTime = Date.now();
         stats.packetsReceived++;
         
         if (stats.packetsReceived % 100 === 0) {
-            console.log(`✓ Receiving E1.31 Universe ${UNIVERSE}: [${latestChannelData.slice(0, 10).join(', ')}]`);
+            console.log(`✓ Receiving DDP: Offset ${offset}, Length ${dataLength}, Data: [${latestChannelData.slice(0, 10).join(', ')}]`);
         }
     } catch (error) {
-        console.error('Error parsing E1.31 packet:', error.message);
+        console.error('Error parsing DDP packet:', error.message);
     }
 });
 
 udpSocket.on('listening', () => {
     const address = udpSocket.address();
-    console.log(`✓ Listening for E1.31 on port ${address.port}`);
-    console.log(`  Configure FPP to output Universe ${UNIVERSE} to 127.0.0.1:${E131_PORT}\n`);
+    console.log(`✓ Listening for DDP on port ${address.port}`);
+    console.log(`  Configure FPP to output via DDP to 127.0.0.1\n`);
 });
 
-// Bind to E1.31 port
+// Bind to DDP port
 try {
-    udpSocket.bind(E131_PORT);
+    udpSocket.bind(DDP_PORT);
 } catch (error) {
-    console.error(`Failed to bind to port ${E131_PORT}:`, error.message);
-    console.error('Make sure no other E1.31 receiver is running.');
+    console.error(`Failed to bind to port ${DDP_PORT}:`, error.message);
+    console.error('Make sure no other DDP receiver is running.');
     process.exit(1);
 }
 
-// Start sending E1.31 data to cloud
+// Start sending DDP data to cloud
 function startDataForwarder() {
     console.log('\n' + '='.repeat(60));
     console.log('DDP MOBILE CLOUD CONNECTOR (FPP PLUGIN)');
     console.log('='.repeat(60));
-    console.log(`Listening for E1.31 Universe ${UNIVERSE}`);
+    console.log(`Listening for DDP on port ${DDP_PORT}`);
     console.log(`Show token: ${showToken}`);
     console.log(`Cloud server: ${CLOUD_SERVER_URL}`);
     console.log(`Forward interval: ${POLL_INTERVAL}ms`);
