@@ -14,7 +14,8 @@ $fppHost = isset($settings['fppHost']) ? $settings['fppHost'] : '127.0.0.1';
 $mqttBroker = isset($settings['mqttBroker']) ? $settings['mqttBroker'] : '';
 $mqttUsername = isset($settings['mqttUsername']) ? $settings['mqttUsername'] : '';
 $mqttPassword = isset($settings['mqttPassword']) ? $settings['mqttPassword'] : '';
-$mqttTopic = isset($settings['mqttTopic']) ? $settings['mqttTopic'] : 'falcon/player/FPP/channel/output/color';
+$mqttTopicColor = isset($settings['mqttTopicColor']) ? $settings['mqttTopicColor'] : 'falcon/player/FPP/channel/output/color';
+$mqttTopicPixels = isset($settings['mqttTopicPixels']) ? $settings['mqttTopicPixels'] : 'falcon/player/FPP/mobileLights/pixel/#';
 $universe = isset($settings['universe']) ? $settings['universe'] : '5';
 $modelName = isset($settings['modelName']) ? $settings['modelName'] : '';
 $enabled = isset($settings['enabled']) ? $settings['enabled'] : false;
@@ -28,7 +29,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'mqttBroker' => trim($_POST['mqttBroker']),
         'mqttUsername' => trim($_POST['mqttUsername']),
         'mqttPassword' => trim($_POST['mqttPassword']),
-        'mqttTopic' => trim($_POST['mqttTopic']),
+        'mqttTopicColor' => trim($_POST['mqttTopicColor']),
+        'mqttTopicPixels' => trim($_POST['mqttTopicPixels']),
         'universe' => intval($_POST['universe']),
         'modelName' => trim($_POST['modelName']),
         'enabled' => isset($_POST['enabled'])
@@ -57,7 +59,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mqttBroker = $settings['mqttBroker'];
     $mqttUsername = $settings['mqttUsername'];
     $mqttPassword = $settings['mqttPassword'];
-    $mqttTopic = $settings['mqttTopic'];
+    $mqttTopicColor = $settings['mqttTopicColor'];
+    $mqttTopicPixels = $settings['mqttTopicPixels'];
     $universe = $settings['universe'];
     $enabled = $settings['enabled'];
 }
@@ -178,9 +181,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         
         <div class="form-group">
-            <label for="mqttTopic">MQTT Topic *</label>
-            <input type="text" name="mqttTopic" id="mqttTopic" value="<?php echo htmlspecialchars($mqttTopic); ?>" required>
-            <div class="help-text">MQTT topic configured in FPP's MQTT output (e.g., falcon/player/FPP/channel/output/color)</div>
+            <label for="mqttTopicColor">MQTT Color Topic *</label>
+            <input type="text" name="mqttTopicColor" id="mqttTopicColor" value="<?php echo htmlspecialchars($mqttTopicColor); ?>" required>
+            <div class="help-text">MQTT topic for main RGB color (e.g., falcon/player/FPP/channel/output/color)</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="mqttTopicPixels">MQTT Pixel Topics (Optional)</label>
+            <input type="text" name="mqttTopicPixels" id="mqttTopicPixels" value="<?php echo htmlspecialchars($mqttTopicPixels); ?>">
+            <div class="help-text">MQTT wildcard topic for 10 pixels (e.g., falcon/player/FPP/mobileLights/pixel/#). Use # for wildcard.</div>
         </div>
         
         <div class="form-group">

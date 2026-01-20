@@ -9,11 +9,12 @@ const settingsFile = path.join(__dirname, 'settings', 'config.json');
 let settings = {
     apiKey: '',
     cloudServerUrl: 'http://localhost:3002',
-    fppHost: '127.0.0.1',  // IP address of FPP (use 127.0.0.1 if running ON the FPP)
-    mqttBroker: '',  // MQTT broker URL (empty = auto-detect from FPP)
-    mqttUsername: '',  // MQTT username (optional)
-    mqttPassword: '',  // MQTT password (optional)
-    mqttTopic: 'falcon/player/FPP/channel/output/color',  // MQTT topic
+    fppHost: '127.0.0.1',
+    mqttBroker: '',
+    mqttUsername: '',
+    mqttPassword: '',
+    mqttTopicColor: 'falcon/player/FPP/channel/output/color',  // Single color topic
+    mqttTopicPixels: 'falcon/player/FPP/mobileLights/pixel/#',  // Wildcard for pixels (e.g., falcon/player/FPP/mobileLights/pixel/1, pixel/2, etc.)
     enabled: false
 };
 
@@ -45,7 +46,8 @@ const API_KEY = settings.apiKey;
 
 // FPP MQTT configuration
 const MQTT_BROKER = settings.mqttBroker || `mqtt://${settings.fppHost || '127.0.0.1'}:1883`;
-const MQTT_TOPIC = settings.mqttTopic || 'falcon/player/FPP/channel/output/color';
+const MQTT_TOPIC_COLOR = settings.mqttTopicColor || 'falcon/player/FPP/channel/output/color';
+const MQTT_TOPIC_PIXELS = settings.mqttTopicPixels || 'falcon/player/FPP/pixel/#';
 const FPP_HOST = settings.fppHost || '127.0.0.1';
 const FORWARD_INTERVAL = 40; // Forward data every 40ms (~25 FPS)
 
@@ -180,7 +182,7 @@ function connectToFPPMQTT() {
     const brokerUrl = global.MQTT_BROKER_OVERRIDE || MQTT_BROKER;
     
     console.log(`Connecting to FPP MQTT broker at ${brokerUrl}...`);
-    console.log(`Subscribing to topic: ${MQTT_TOPIC}`);
+    console.log(`Will subscribe to topics: ${MQTT_TOPIC_COLOR} and ${MQTT_TOPIC_PIXELS}`);
     
     const mqttOptions = {
         reconnectPeriod: 5000,
@@ -201,19 +203,28 @@ function connectToFPPMQTT() {
     mqttClient.on('connect', () => {
         console.log('✓ Connected to FPP MQTT broker');
         
-        // Subscribe to the channel output topic
-        mqttClient.subscribe(MQTT_TOPIC, (err) => {
+        // Subscribe to color topic
+        mqttClient.subscribe(MQTT_TOPIC_COLOR, (err) => {
             if (err) {
-                console.error('Failed to subscribe to MQTT topic:', err.message);
+                console.error('Failed to subscribe to color topic:', err.message);
             } else {
-                console.log(`✓ Subscribed to ${MQTT_TOPIC}`);
+                console.log(`✓ Subscribed to ${MQTT_TOPIC_COLOR}`);
+            }
+        });
+        
+        // Subscribe to pixel topics (wildcard)
+        mqttClient.subscribe(MQTT_TOPIC_PIXELS, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to pixel topics:', err.message);
+            } else {
+                console.log(`✓ Subscribed to ${MQTT_TOPIC_PIXELS}`);
             }
         });
     });
     
     mqttClient.on('message', (topic, message) => {
         try {
-            processMQTTMessage(message.toString());
+            processMQTTMessage(topic, message.toString());
         } catch (error) {
             console.error('Error processing MQTT message:', error.message);
             stats.errors++;
@@ -236,10 +247,9 @@ function connectToFPPMQTT() {
 
 // Process MQTT message from FPP
 // FPP MQTT output format: "R,G,B" or custom payload pattern
-function processMQTTMessage(message) {
+function processMQTTMessage(topic, message) {
     try {
         // Parse RGB values from message
-        // Format could be: "255,0,0" or "#FF0000" or custom pattern
         let r = 0, g = 0, b = 0;
         
         if (message.includes(',')) {
@@ -262,10 +272,24 @@ function processMQTTMessage(message) {
             b = data.b || data.B || 0;
         }
         
-        // Store RGB in channels 0-2
-        latestChannelData[0] = r;
-        latestChannelData[1] = g;
-        latestChannelData[2] = b;
+        // Check if this is a pixel topic (e.g., falcon/player/FPP/pixel/1)
+        const pixelMatch = topic.match(/pixel\/(\d+)$/);
+        
+        if (pixelMatch) {
+            // This is a pixel topic - store in pixel array
+            const pixelIndex = parseInt(pixelMatch[1]) - 1; // 0-indexed
+            if (pixelIndex >= 0 && pixelIndex < 10) {
+                const offset = 3 + (pixelIndex * 3);
+                latestChannelData[offset] = r;
+                latestChannelData[offset + 1] = g;
+                latestChannelData[offset + 2] = b;
+            }
+        } else {
+            // This is the main color topic - store in channels 0-2
+            latestChannelData[0] = r;
+            latestChannelData[1] = g;
+            latestChannelData[2] = b;
+        }
         
         // For now, pixels (channels 3-32) remain zeros
         // Can be expanded later when MQTT supports more channels
@@ -292,17 +316,20 @@ function startDataForwarder() {
     console.log(`Show token: ${showToken}`);
     console.log(`Cloud server: ${CLOUD_SERVER_URL}`);
     console.log(`MQTT Broker: ${brokerUrl}`);
-    console.log(`MQTT Topic: ${MQTT_TOPIC}`);
+    console.log(`Color Topic: ${MQTT_TOPIC_COLOR}`);
+    console.log(`Pixel Topics: ${MQTT_TOPIC_PIXELS}`);
     console.log(`Forward interval: ${FORWARD_INTERVAL}ms`);
     console.log('='.repeat(60));
-    console.log('\nIMPORTANT: You must configure FPP with an MQTT output:');
-    console.log('  1. Go to Input/Output Setup -> Channel Outputs');
-    console.log('  2. Add new output: MQTT');
-    console.log('  3. Set your desired start channel (e.g., 1 or 100)');
-    console.log('  4. Channel count: 3 (for RGB)');
-    console.log('  5. Configure MQTT broker (usually localhost:1883)');
-    console.log('  6. Set topic and payload pattern');
-    console.log('  7. Enable the output');
+    console.log('\nMQTT Output Configuration in FPP:');
+    console.log('  Main Color (channels 1-3):');
+    console.log(`    Topic: ${MQTT_TOPIC_COLOR}`);
+    console.log('    Payload: %R%,%G%,%B%');
+    console.log('  ');
+    console.log('  Pixels (10 outputs):');
+    console.log('    Pixel 1 (channels 9491-9493): falcon/player/FPP/pixel/1');
+    console.log('    Pixel 2 (channels 9494-9496): falcon/player/FPP/pixel/2');
+    console.log('    ...');
+    console.log('    Pixel 10 (channels 9518-9520): falcon/player/FPP/pixel/10');
     console.log('='.repeat(60) + '\n');
     
     // Connect to FPP's MQTT broker
