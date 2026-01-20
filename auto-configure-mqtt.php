@@ -64,11 +64,14 @@ if ($outputsJson === false) {
 
 $currentOutputs = json_decode($outputsJson, true);
 
+// Extract channelOutputs array if it exists
+$channelOutputs = $currentOutputs['channelOutputs'] ?? $currentOutputs;
+
 // Find and remove old mobileLights MQTT outputs
 $outputsToKeep = [];
-foreach ($currentOutputs as $output) {
+foreach ($channelOutputs as $output) {
     // Keep outputs that are NOT our mobileLights MQTT outputs
-    if ($output['type'] !== 'MQTT' || 
+    if ($output['type'] !== 'MQTTOutput' || 
         (strpos($output['topic'] ?? '', $pixelTopicBase) === false && 
          $output['topic'] !== $mqttTopicColor)) {
         $outputsToKeep[] = $output;
@@ -80,18 +83,13 @@ $newOutputs = [];
 
 // Add main color output (first 3 channels)
 $newOutputs[] = [
-    'type' => 'MQTT',
     'enabled' => 1,
+    'type' => 'MQTTOutput',
     'startChannel' => $startChannel,
     'channelCount' => 3,
-    'host' => $mqttBroker ?: 'localhost:1883',
-    'username' => $mqttUsername,
-    'password' => $mqttPassword,
     'topic' => $mqttTopicColor,
-    'message' => '%R%,%G%,%B%',
-    'qos' => 0,
-    'retain' => 0,
-    'description' => "MobileLights Color ({$modelName})"
+    'payload' => '%R%,%G%,%B%',
+    'channelType' => 'RGB'
 ];
 
 // Add pixel outputs (3 channels each)
@@ -100,30 +98,31 @@ for ($i = 0; $i < $numPixels; $i++) {
     $pixelStartChannel = $startChannel + 3 + ($i * 3);
     
     $newOutputs[] = [
-        'type' => 'MQTT',
         'enabled' => 1,
+        'type' => 'MQTTOutput',
         'startChannel' => $pixelStartChannel,
         'channelCount' => 3,
-        'host' => $mqttBroker ?: 'localhost:1883',
-        'username' => $mqttUsername,
-        'password' => $mqttPassword,
         'topic' => "{$pixelTopicBase}/{$pixelNum}",
-        'message' => '%R%,%G%,%B%',
-        'qos' => 0,
-        'retain' => 0,
-        'description' => "MobileLights Pixel {$pixelNum} ({$modelName})"
+        'payload' => '%R%,%G%,%B%',
+        'channelType' => 'RGB'
     ];
 }
 
 // Combine kept outputs with new outputs
 $finalOutputs = array_merge($outputsToKeep, $newOutputs);
 
+// Wrap in proper format for FPP
+$updateData = [
+    'channelOutputs' => $finalOutputs,
+    'status' => 'OK'
+];
+
 // Update FPP MQTT outputs (co-other.json)
 $context = stream_context_create([
     'http' => [
         'method' => 'POST',
         'header' => 'Content-Type: application/json',
-        'content' => json_encode($finalOutputs)
+        'content' => json_encode($updateData)
     ]
 ]);
 
@@ -146,6 +145,8 @@ echo json_encode([
         'channelCount' => $channelCount,
         'numPixels' => $numPixels,
         'outputsCreated' => count($newOutputs),
-        'outputsRemoved' => count($currentOutputs) - count($outputsToKeep)
+        'outputsRemoved' => count($channelOutputs) - count($outputsToKeep)
+    ]
+]);
     ]
 ]);
