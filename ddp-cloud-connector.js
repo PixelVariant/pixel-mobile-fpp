@@ -1,5 +1,6 @@
 const { io } = require('socket.io-client');
 const axios = require('axios');
+const dgram = require('dgram');
 const fs = require('fs');
 const path = require('path');
 
@@ -40,14 +41,9 @@ const API_KEY = settings.apiKey;
 const UNIVERSE = parseInt(settings.universe);
 const MODEL_NAME = settings.modelName || '';
 
-// FPP API configuration
-const FPP_API_URL = 'http://localhost';
-const UNIVERSE_SIZE = 512; // Standard DMX universe size
-const ABSOLUTE_START_CHANNEL = ((UNIVERSE - 1) * UNIVERSE_SIZE) + 1;
-const SINGLE_COLOR_CHANNEL = 1;
-const PIXELS_START_CHANNEL = 4;
-const NUM_PIXELS = 10;
-const POLL_INTERVAL = 40; // Poll every 40ms (~25 FPS)
+// E1.31 Listener configuration
+const E131_PORT = 5568;  // Standard E1.31 port
+const POLL_INTERVAL = 40; // Process data every 40ms (~25 FPS)
 
 let showToken = null;
 let cloudSocket = null;
@@ -91,8 +87,8 @@ async function initialize() {
         // Connect to cloud server
         connectToCloud();
         
-        // Start reading FPP channel data
-        startChannelDataReader();
+        // Start data forwarder
+        startDataForwarder();
         
     } catch (error) {
         console.error('Initialization error:', error.message);
@@ -139,217 +135,104 @@ function connectToCloud() {
     });
 }
 
-// Read channel data from FPP shared memory file
-function readChannelData() {
-    try {
-        // FPP creates model-specific data files in /dev/shm/
-        let channelDataFile = null;
-        
-        if (MODEL_NAME) {
-            // Convert model name to filename format (spaces to underscores)
-            const filename = MODEL_NAME.replace(/ /g, '_');
-            channelDataFile = `/dev/shm/FPP-Model-Data-${filename}`;
-            
-            if (!fs.existsSync(channelDataFile)) {
-                if (stats.packetsReceived % 100 === 0) {
-                    console.log(`\nWARNING: Model data file not found: ${channelDataFile}`);
-                    console.log(`Make sure model "${MODEL_NAME}" exists and is being used.\n`);
-                }
-                return null;
-            }
-        } else {
-            // Without a model name, we'd need to read the main channel data file
-            channelDataFile = '/dev/shm/FPP-ChannelData';
-            
-            if (!fs.existsSync(channelDataFile)) {
-                if (stats.packetsReceived % 100 === 0) {
-                    console.log(`\nWARNING: Channel data file not found. Please specify a model name.\n`);
-                }
-                return null;
-            }
-        }
-        
-        return readFromFile(channelDataFile);
-    } catch (error) {
-        if (stats.packetsReceived % 1000 === 0) {
-            console.error('Error reading channel data:', error.message);
-        }
-        return null;
-    }
-}
+// Store latest channel data from E1.31
+let latestChannelData = new Array(512).fill(0);
+let lastPacketTime = 0;
 
-function readFromFile(filePath) {
+// Create UDP socket to listen for E1.31 data
+const udpSocket = dgram.createSocket('udp4');
+
+udpSocket.on('error', (err) => {
+    console.error(`UDP socket error:\n${err.stack}`);
+    udpSocket.close();
+});
+
+udpSocket.on('message', (msg, rinfo) => {
     try {
-        const buffer = fs.readFileSync(filePath);
-        let channelData = new Array(33).fill(0);
+        // E1.31 packet structure (simplified)
+        // Bytes 0-17: RLP Preamble
+        // Bytes 18-37: Frame Layer
+        // Bytes 38-115: DMP Layer
+        // Bytes 116+: DMX data (1 byte start code + 512 bytes channel data)
         
-        if (stats.packetsReceived === 1) {
-            console.log(`\n=== READING FROM ${filePath} ===`);
-            console.log(`File size: ${buffer.length} bytes`);
+        if (msg.length < 126) return; // Minimum E1.31 packet size
+        
+        // Check for E1.31 packet (ASC-E1.17)
+        const vector = msg.readUInt32BE(18);
+        if (vector !== 0x00000004) return; // Not E1.31 DATA packet
+        
+        // Get universe number
+        const packetUniverse = msg.readUInt16BE(113);
+        
+        // Only process our target universe
+        if (packetUniverse !== UNIVERSE) return;
+        
+        // DMX data starts at byte 126 (after start code at 125)
+        const dmxData = msg.slice(126);
+        
+        // Update our channel data buffer
+        for (let i = 0; i < Math.min(512, dmxData.length); i++) {
+            latestChannelData[i] = dmxData[i];
         }
         
-        // Read first 33 bytes (FPP model data files contain raw channel values)
-        for (let i = 0; i < Math.min(33, buffer.length); i++) {
-            channelData[i] = buffer[i];
-        }
+        lastPacketTime = Date.now();
+        stats.packetsReceived++;
         
-        if (stats.packetsReceived === 1) {
-            console.log(`Reading first 33 bytes as RGB channels`);
-            console.log(`First 10 values: [${channelData.slice(0, 10).join(', ')}]`);
-            console.log(`================================\n`);
-        }
-        
-        // Log non-zero data occasionally
         if (stats.packetsReceived % 100 === 0) {
-            const hasData = channelData.some(v => v > 0);
-            if (hasData) {
-                console.log(`✓ Reading live data: R=${channelData[0]} G=${channelData[1]} B=${channelData[2]} [${channelData.slice(0, 10).join(', ')}]`);
-            } else if (stats.packetsReceived % 500 === 0) {
-                console.log(`No data (all zeros) - is sequence playing and affecting this model?`);
-            }
+            console.log(`✓ Receiving E1.31 Universe ${UNIVERSE}: [${latestChannelData.slice(0, 10).join(', ')}]`);
         }
-        
-        return channelData;
     } catch (error) {
-        throw error;
+        console.error('Error parsing E1.31 packet:', error.message);
     }
+});
+
+udpSocket.on('listening', () => {
+    const address = udpSocket.address();
+    console.log(`✓ Listening for E1.31 on port ${address.port}`);
+    console.log(`  Configure FPP to output Universe ${UNIVERSE} to 127.0.0.1:${E131_PORT}\n`);
+});
+
+// Bind to E1.31 port
+try {
+    udpSocket.bind(E131_PORT);
+} catch (error) {
+    console.error(`Failed to bind to port ${E131_PORT}:`, error.message);
+    console.error('Make sure no other E1.31 receiver is running.');
+    process.exit(1);
 }
 
-// Old API-based function (keeping for reference but not used)
-async function readChannelDataFromAPI() {
-    try {
-        const response = await axios.get(`${FPP_API_URL}/api/models`, {
-            timeout: 100
-        });
-        
-        if (!response.data || !Array.isArray(response.data)) {
-            return null;
-        }
-        
-        // Debug: Show raw response structure once
-        if (stats.packetsReceived === 1) {
-            console.log(`\n=== RAW FPP API RESPONSE SAMPLE ===`);
-            console.log(JSON.stringify(response.data[0], null, 2));
-            console.log(`===================================\n`);
-        }
-        
-        // Debug: List available models every 100 packets
-        if (stats.packetsReceived % 100 === 0) {
-            console.log(`\n=== AVAILABLE MODELS FROM FPP ===`);
-            console.log(`Total models: ${response.data.length}`);
-            response.data.slice(0, 5).forEach(m => {
-                const hasData = m.data && m.data.length > 0;
-                const dataPreview = hasData ? m.data.split(',').slice(0, 5).join(',') : 'NO DATA';
-                console.log(`  - "${m.Name}" (Ch ${m.StartChannel}, Count: ${m.ChannelCount}) Data: [${dataPreview}${hasData ? '...' : ''}]`);
-            });
-            if (response.data.length > 5) {
-                console.log(`  ... and ${response.data.length - 5} more`);
-            }
-            console.log(`================================\n`);
-        }
-        
-        let channelData = new Array(33).fill(0);
-        
-        // If model name is specified, use that model
-        if (MODEL_NAME) {
-            const model = response.data.find(m => m.Name === MODEL_NAME);
-            if (model && model.data) {
-                const data = model.data.split(',');
-                
-                // Debug log every 100 packets
-                if (stats.packetsReceived % 100 === 0) {
-                    console.log(`\n=== FPP DATA DEBUG ===`);
-                    console.log(`Model: ${MODEL_NAME}`);
-                    console.log(`StartChannel: ${model.StartChannel}, ChannelCount: ${model.ChannelCount}`);
-                    console.log(`First 10 values from FPP: [${data.slice(0, 10).join(', ')}]`);
-                }
-                
-                // Take first 33 values from the model
-                for (let i = 0; i < Math.min(33, data.length); i++) {
-                    channelData[i] = parseInt(data[i]) || 0;
-                }
-            } else {
-                if (stats.packetsReceived % 100 === 0) {
-                    console.log(`WARNING: Model "${MODEL_NAME}" not found or has no data`);
-                }
-            }
-        } else {
-            // Use universe-based channel mapping
-            const startChannel = ABSOLUTE_START_CHANNEL;
-            const endChannel = startChannel + 32; // Channels 1-33
-            
-            for (const model of response.data) {
-                const modelStart = model.StartChannel;
-                const modelEnd = modelStart + model.ChannelCount - 1;
-                
-                // Check if this model overlaps our channels
-                if (modelEnd >= startChannel && modelStart <= endChannel) {
-                    const data = model.data ? model.data.split(',') : [];
-                    
-                    // Extract relevant channels
-                    for (let i = 0; i < 33; i++) {
-                        const absChannel = startChannel + i;
-                        if (absChannel >= modelStart && absChannel <= modelEnd) {
-                            const dataIndex = absChannel - modelStart;
-                            if (dataIndex < data.length && data[dataIndex]) {
-                                channelData[i] = parseInt(data[dataIndex]) || 0;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        return channelData;
-    } catch (error) {
-        if (error.code !== 'ECONNREFUSED') {
-            console.error('Error reading channel data:', error.message);
-            stats.errors++;
-        }
-        return null;
-    }
-}
-
-// Start polling FPP API
-function startChannelDataReader() {
+// Start sending E1.31 data to cloud
+function startDataForwarder() {
     console.log('\n' + '='.repeat(60));
     console.log('DDP MOBILE CLOUD CONNECTOR (FPP PLUGIN)');
     console.log('='.repeat(60));
-    console.log(`Reading from: FPP channel memory`);
-    if (MODEL_NAME) {
-        console.log(`Using model: ${MODEL_NAME}`);
-    } else {
-        console.log(`Target universe: ${UNIVERSE}`);
-        console.log(`Absolute channels: ${ABSOLUTE_START_CHANNEL}-${ABSOLUTE_START_CHANNEL + 32}`);
-    }
+    console.log(`Listening for E1.31 Universe ${UNIVERSE}`);
     console.log(`Show token: ${showToken}`);
     console.log(`Cloud server: ${CLOUD_SERVER_URL}`);
-    console.log(`Polling interval: ${POLL_INTERVAL}ms`);
+    console.log(`Forward interval: ${POLL_INTERVAL}ms`);
     console.log('='.repeat(60) + '\n');
     
+    // Forward data to cloud periodically
     setInterval(() => {
         try {
-            const channelData = readChannelData();
-            if (!channelData) {
-                return;
+            // Check if we've received data recently (within last second)
+            if (Date.now() - lastPacketTime > 1000) {
+                return; // No recent data
             }
             
-            stats.packetsReceived++;
-            
             // Extract single color (channels 1-3)
-            const r = channelData[SINGLE_COLOR_CHANNEL - 1];
-            const g = channelData[SINGLE_COLOR_CHANNEL - 1 + 1];
-            const b = channelData[SINGLE_COLOR_CHANNEL - 1 + 2];
+            const r = latestChannelData[0];
+            const g = latestChannelData[1];
+            const b = latestChannelData[2];
             
             // Extract 10 pixels (channels 4-33)
             const pixels = [];
-            const pixelsOffset = PIXELS_START_CHANNEL - 1;
-            for (let i = 0; i < NUM_PIXELS; i++) {
-                const offset = pixelsOffset + (i * 3);
+            for (let i = 0; i < 10; i++) {
+                const offset = 3 + (i * 3);
                 pixels.push({
-                    r: channelData[offset],
-                    g: channelData[offset + 1],
-                    b: channelData[offset + 2]
+                    r: latestChannelData[offset],
+                    g: latestChannelData[offset + 1],
+                    b: latestChannelData[offset + 2]
                 });
             }
             
