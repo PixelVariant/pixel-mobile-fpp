@@ -1,4 +1,3 @@
-const dgram = require('dgram');
 const { io } = require('socket.io-client');
 const axios = require('axios');
 const fs = require('fs');
@@ -35,16 +34,18 @@ if (!settings.apiKey) {
     process.exit(0);
 }
 
-const E131_PORT = 5568;
 const API_SERVER_URL = settings.cloudServerUrl.replace(':3002', ':3001');
 const CLOUD_SERVER_URL = settings.cloudServerUrl;
 const API_KEY = settings.apiKey;
 const UNIVERSE = parseInt(settings.universe);
 
-// E1.31 configuration
+// FPP channel data configuration
+const CHANNEL_DATA_FILE = '/dev/shm/ChannelData';
+const UNIVERSE_SIZE = 512; // Standard DMX universe size
 const SINGLE_COLOR_CHANNEL = 1;
 const PIXELS_START_CHANNEL = 4;
 const NUM_PIXELS = 10;
+const POLL_INTERVAL = 40; // Poll every 40ms (~25 FPS)
 
 let showToken = null;
 let cloudSocket = null;
@@ -88,8 +89,8 @@ async function initialize() {
         // Connect to cloud server
         connectToCloud();
         
-        // Start E1.31 receiver
-        startE131Receiver();
+        // Start reading FPP channel data
+        startChannelDataReader();
         
     } catch (error) {
         console.error('Initialization error:', error.message);
