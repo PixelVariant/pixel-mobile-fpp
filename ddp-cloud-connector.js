@@ -151,6 +151,19 @@ async function readChannelData() {
             return null;
         }
         
+        // Debug: List available models every 100 packets
+        if (stats.packetsReceived % 100 === 0) {
+            console.log(`\n=== AVAILABLE MODELS FROM FPP ===`);
+            console.log(`Total models: ${response.data.length}`);
+            response.data.slice(0, 10).forEach(m => {
+                console.log(`  - "${m.Name}" (Ch ${m.StartChannel}, Count: ${m.ChannelCount})`);
+            });
+            if (response.data.length > 10) {
+                console.log(`  ... and ${response.data.length - 10} more`);
+            }
+            console.log(`================================\n`);
+        }
+        
         let channelData = new Array(33).fill(0);
         
         // If model name is specified, use that model
