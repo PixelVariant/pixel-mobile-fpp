@@ -142,13 +142,91 @@ function connectToCloud() {
 // Read channel data from FPP API
 async function readChannelData() {
     try {
-        // Poll FPP API for models data
+        // Try different FPP API endpoints to get channel data
+        
+        // Option 1: Try channeloutputs endpoint
+        try {
+            const outputResponse = await axios.get(`${FPP_API_URL}/api/channeloutputs`, {
+                timeout: 100
+            });
+            
+            if (stats.packetsReceived === 1) {
+                console.log(`\n=== TESTING /api/channeloutputs ===`);
+                console.log(JSON.stringify(outputResponse.data, null, 2).substring(0, 500));
+                console.log(`===================================\n`);
+            }
+        } catch (e) {
+            if (stats.packetsReceived === 1) {
+                console.log(`/api/channeloutputs not available: ${e.message}`);
+            }
+        }
+        
+        // Option 2: Try fppd status
+        try {
+            const statusResponse = await axios.get(`${FPP_API_URL}/api/fppd/status`, {
+                timeout: 100
+            });
+            
+            if (stats.packetsReceived === 1) {
+                console.log(`\n=== TESTING /api/fppd/status ===`);
+                console.log(JSON.stringify(statusResponse.data, null, 2).substring(0, 500));
+                console.log(`===================================\n`);
+            }
+        } catch (e) {
+            if (stats.packetsReceived === 1) {
+                console.log(`/api/fppd/status not available: ${e.message}`);
+            }
+        }
+        
+        // Option 3: Try direct channel read with range
+        try {
+            const startCh = MODEL_NAME ? 1 : ABSOLUTE_START_CHANNEL;
+            const channelResponse = await axios.get(`${FPP_API_URL}/api/channel/${startCh}-${startCh + 32}`, {
+                timeout: 100
+            });
+            
+            if (stats.packetsReceived === 1) {
+                console.log(`\n=== TESTING /api/channel/${startCh}-${startCh + 32} ===`);
+                console.log(JSON.stringify(channelResponse.data, null, 2));
+                console.log(`===================================\n`);
+            }
+            
+            // If this works, parse the response
+            if (channelResponse.data) {
+                let channelData = new Array(33).fill(0);
+                // Response might be an array or object, handle both
+                if (Array.isArray(channelResponse.data)) {
+                    channelResponse.data.forEach((val, idx) => {
+                        if (idx < 33) channelData[idx] = val;
+                    });
+                }
+                
+                if (stats.packetsReceived % 100 === 0 && channelData.some(v => v > 0)) {
+                    console.log(`Channel data found: [${channelData.slice(0, 10).join(', ')}]`);
+                }
+                
+                return channelData;
+            }
+        } catch (e) {
+            if (stats.packetsReceived === 1) {
+                console.log(`/api/channel/range not available: ${e.message}`);
+            }
+        }
+        
+        // Fallback to models API
         const response = await axios.get(`${FPP_API_URL}/api/models`, {
             timeout: 100
         });
         
         if (!response.data || !Array.isArray(response.data)) {
             return null;
+        }
+        
+        // Debug: Show raw response structure once
+        if (stats.packetsReceived === 1) {
+            console.log(`\n=== RAW FPP API RESPONSE SAMPLE ===`);
+            console.log(JSON.stringify(response.data[0], null, 2));
+            console.log(`===================================\n`);
         }
         
         // Debug: List available models every 100 packets
