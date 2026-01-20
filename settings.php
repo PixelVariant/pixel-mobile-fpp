@@ -11,6 +11,7 @@ if (file_exists($settingsFile)) {
 $apiKey = isset($settings['apiKey']) ? $settings['apiKey'] : '';
 $cloudServerUrl = isset($settings['cloudServerUrl']) ? $settings['cloudServerUrl'] : 'http://your-cloud-server:3002';
 $fppHost = isset($settings['fppHost']) ? $settings['fppHost'] : '127.0.0.1';
+$mqttTopic = isset($settings['mqttTopic']) ? $settings['mqttTopic'] : 'falcon/player/FPP/channel/output/color';
 $universe = isset($settings['universe']) ? $settings['universe'] : '5';
 $modelName = isset($settings['modelName']) ? $settings['modelName'] : '';
 $enabled = isset($settings['enabled']) ? $settings['enabled'] : false;
@@ -21,6 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'apiKey' => trim($_POST['apiKey']),
         'cloudServerUrl' => trim($_POST['cloudServerUrl']),
         'fppHost' => trim($_POST['fppHost']),
+        'mqttTopic' => trim($_POST['mqttTopic']),
         'universe' => intval($_POST['universe']),
         'modelName' => trim($_POST['modelName']),
         'enabled' => isset($_POST['enabled'])
@@ -46,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $apiKey = $settings['apiKey'];
     $cloudServerUrl = $settings['cloudServerUrl'];
     $fppHost = $settings['fppHost'];
+    $mqttTopic = $settings['mqttTopic'];
     $universe = $settings['universe'];
     $enabled = $settings['enabled'];
 }
@@ -145,6 +148,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label for="fppHost">FPP Host IP *</label>
             <input type="text" name="fppHost" id="fppHost" value="<?php echo htmlspecialchars($fppHost); ?>" required>
             <div class="help-text">IP of FPP device (use 127.0.0.1 if plugin runs ON the FPP, or 192.168.x.x if running remotely)</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="mqttTopic">MQTT Topic *</label>
+            <input type="text" name="mqttTopic" id="mqttTopic" value="<?php echo htmlspecialchars($mqttTopic); ?>" required>
+            <div class="help-text">MQTT topic configured in FPP's MQTT output (e.g., falcon/player/FPP/channel/output/color)</div>
         </div>
         
         <div class="form-group">

@@ -1,6 +1,6 @@
 const { io } = require('socket.io-client');
 const axios = require('axios');
-const http = require('http');
+const mqtt = require('mqtt');
 const fs = require('fs');
 const path = require('path');
 
@@ -39,9 +39,10 @@ const API_SERVER_URL = settings.cloudServerUrl.replace(':3002', ':3001');
 const CLOUD_SERVER_URL = settings.cloudServerUrl;
 const API_KEY = settings.apiKey;
 
-// FPP HTTP Virtual Display configuration
-const FPP_VIRTUAL_DISPLAY_PORT = 32328;  // FPP's HTTPVirtualDisplay port
-const FPP_HOST = settings.fppHost || '127.0.0.1';  // From settings, default to localhost
+// FPP MQTT configuration
+const MQTT_BROKER = `mqtt://${settings.fppHost || '127.0.0.1'}:1883`;
+const MQTT_TOPIC = settings.mqttTopic || 'falcon/player/FPP/channel/output/color';
+const FPP_HOST = settings.fppHost || '127.0.0.1';
 const FORWARD_INTERVAL = 40; // Forward data every 40ms (~25 FPS)
 
 let showToken = null;
@@ -134,124 +135,101 @@ function connectToCloud() {
     });
 }
 
-// Store latest channel data from FPP Virtual Display
+// Store latest channel data from FPP MQTT
 let latestChannelData = new Array(512).fill(0);
 let lastDataTime = 0;
+let mqttClient = null;
 
-// Base64 decode table (for FPP's SSE data format)
-const base64Table = {};
-const base64Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+/";
-for (let i = 0; i < base64Chars.length; i++) {
-    base64Table[base64Chars[i]] = i;
-}
-
-// Connect to FPP's HTTP Virtual Display SSE stream
-function connectToFPPVirtualDisplay() {
-    const options = {
-        hostname: FPP_HOST,
-        port: FPP_VIRTUAL_DISPLAY_PORT,
-        path: '/api/http-virtual-display/',
-        method: 'GET',
-        headers: {
-            'Accept': 'text/event-stream',
-            'Cache-Control': 'no-cache'
-        }
-    };
+// Connect to FPP's MQTT broker and subscribe to channel data
+function connectToFPPMQTT() {
+    console.log(`Connecting to FPP MQTT broker at ${MQTT_BROKER}...`);
+    console.log(`Subscribing to topic: ${MQTT_TOPIC}`);
     
-    console.log(`Connecting to FPP HTTP Virtual Display at ${FPP_HOST}:${FPP_VIRTUAL_DISPLAY_PORT}...`);
-    
-    const req = http.request(options, (res) => {
-        if (res.statusCode !== 200) {
-            console.error(`Failed to connect to FPP Virtual Display. Status: ${res.statusCode}`);
-            console.error('Make sure you have configured an "HTTP Virtual Display" output in FPP.');
-            console.error('Go to: Input/Output Setup -> Channel Outputs -> Add HTTP Virtual Display');
-            setTimeout(connectToFPPVirtualDisplay, 5000);
-            return;
-        }
-        
-        console.log('✓ Connected to FPP HTTP Virtual Display SSE stream');
-        
-        let buffer = '';
-        
-        res.on('data', (chunk) => {
-            buffer += chunk.toString();
-            
-            // Process complete SSE messages
-            const lines = buffer.split('\n\n');
-            buffer = lines.pop(); // Keep incomplete message in buffer
-            
-            lines.forEach(message => {
-                if (message.trim() === '') return;
-                
-                // Parse SSE message
-                const dataMatch = message.match(/data: (.+)/);
-                if (dataMatch) {
-                    processSSEData(dataMatch[1]);
-                }
-            });
-        });
-        
-        res.on('end', () => {
-            console.log('SSE connection closed. Reconnecting in 2 seconds...');
-            setTimeout(connectToFPPVirtualDisplay, 2000);
-        });
+    mqttClient = mqtt.connect(MQTT_BROKER, {
+        reconnectPeriod: 5000,
+        connectTimeout: 10000
     });
     
-    req.on('error', (error) => {
-        console.error(`Connection error to FPP Virtual Display: ${error.message}`);
-        console.error('Retrying in 5 seconds...');
-        setTimeout(connectToFPPVirtualDisplay, 5000);
-    });
-    
-    req.end();
-}
-
-// Process SSE data from FPP
-// Format: "RGB666:XY;XY;XY|RGB666:XY;XY;XY"
-// RGB666 = 3 base64 chars (6 bits each = 18 bits for RGB)
-// XY = 2-6 base64 chars for x,y coordinates
-function processSSEData(data) {
-    try {
-        const colorGroups = data.split('|');
+    mqttClient.on('connect', () => {
+        console.log('✓ Connected to FPP MQTT broker');
         
-        colorGroups.forEach(group => {
-            const [colorStr, locations] = group.split(':');
-            if (!colorStr || !locations) return;
-            
-            // Decode RGB from base64 (3 chars = 18 bits, 6 bits per channel)
-            const r = (base64Table[colorStr[0]] << 2);  // 6 bits -> 8 bits
-            const g = (base64Table[colorStr[1]] << 2);
-            const b = (base64Table[colorStr[2]] << 2);
-            
-            // For now, just store the first pixel's RGB in channels 0-2
-            // and mark that we received data
-            if (latestChannelData[0] === undefined || colorGroups.indexOf(group) === 0) {
-                latestChannelData[0] = r;
-                latestChannelData[1] = g;
-                latestChannelData[2] = b;
+        // Subscribe to the channel output topic
+        mqttClient.subscribe(MQTT_TOPIC, (err) => {
+            if (err) {
+                console.error('Failed to subscribe to MQTT topic:', err.message);
+            } else {
+                console.log(`✓ Subscribed to ${MQTT_TOPIC}`);
             }
-            
-            // Parse locations and store more pixels
-            const locs = locations.split(';');
-            locs.forEach((loc, idx) => {
-                if (idx < 10) { // Store up to 10 pixels
-                    const offset = 3 + (idx * 3);
-                    latestChannelData[offset] = r;
-                    latestChannelData[offset + 1] = g;
-                    latestChannelData[offset + 2] = b;
-                }
-            });
         });
+    });
+    
+    mqttClient.on('message', (topic, message) => {
+        try {
+            processMQTTMessage(message.toString());
+        } catch (error) {
+            console.error('Error processing MQTT message:', error.message);
+            stats.errors++;
+        }
+    });
+    
+    mqttClient.on('error', (error) => {
+        console.error(`MQTT connection error: ${error.message}`);
+        stats.errors++;
+    });
+    
+    mqttClient.on('close', () => {
+        console.log('MQTT connection closed. Will attempt to reconnect...');
+    });
+    
+    mqttClient.on('reconnect', () => {
+        console.log('Reconnecting to MQTT broker...');
+    });
+}
+
+// Process MQTT message from FPP
+// FPP MQTT output format: "R,G,B" or custom payload pattern
+function processMQTTMessage(message) {
+    try {
+        // Parse RGB values from message
+        // Format could be: "255,0,0" or "#FF0000" or custom pattern
+        let r = 0, g = 0, b = 0;
+        
+        if (message.includes(',')) {
+            // Format: "R,G,B"
+            const parts = message.split(',').map(p => parseInt(p.trim()));
+            r = parts[0] || 0;
+            g = parts[1] || 0;
+            b = parts[2] || 0;
+        } else if (message.startsWith('#')) {
+            // Format: "#RRGGBB"
+            const hex = message.substring(1);
+            r = parseInt(hex.substring(0, 2), 16) || 0;
+            g = parseInt(hex.substring(2, 4), 16) || 0;
+            b = parseInt(hex.substring(4, 6), 16) || 0;
+        } else {
+            // Try parsing as JSON: {"r":255,"g":0,"b":0}
+            const data = JSON.parse(message);
+            r = data.r || data.R || 0;
+            g = data.g || data.G || 0;
+            b = data.b || data.B || 0;
+        }
+        
+        // Store RGB in channels 0-2
+        latestChannelData[0] = r;
+        latestChannelData[1] = g;
+        latestChannelData[2] = b;
+        
+        // For now, pixels (channels 3-32) remain zeros
+        // Can be expanded later when MQTT supports more channels
         
         lastDataTime = Date.now();
         stats.packetsReceived++;
         
         if (stats.packetsReceived % 100 === 0) {
-            const rgb = latestChannelData.slice(0, 3);
-            console.log(`✓ Receiving FPP data: RGB [${rgb.join(', ')}], Packets: ${stats.packetsReceived}`);
+            console.log(`✓ Receiving MQTT data: RGB [${r}, ${g}, ${b}], Packets: ${stats.packetsReceived}`);
         }
     } catch (error) {
-        console.error('Error parsing SSE data:', error.message);
+        console.error('Error parsing MQTT message:', error.message);
         stats.errors++;
     }
 }
@@ -259,22 +237,26 @@ function processSSEData(data) {
 // Start sending data to cloud
 function startDataForwarder() {
     console.log('\n' + '='.repeat(60));
-    console.log('FPP CLOUD CONNECTOR PLUGIN');
+    console.log('FPP CLOUD CONNECTOR PLUGIN (MQTT)');
     console.log('='.repeat(60));
     console.log(`Show token: ${showToken}`);
     console.log(`Cloud server: ${CLOUD_SERVER_URL}`);
-    console.log(`FPP Virtual Display: ${FPP_HOST}:${FPP_VIRTUAL_DISPLAY_PORT}`);
+    console.log(`MQTT Broker: ${MQTT_BROKER}`);
+    console.log(`MQTT Topic: ${MQTT_TOPIC}`);
     console.log(`Forward interval: ${FORWARD_INTERVAL}ms`);
     console.log('='.repeat(60));
-    console.log('\nIMPORTANT: You must configure FPP with an HTTP Virtual Display output:');
+    console.log('\nIMPORTANT: You must configure FPP with an MQTT output:');
     console.log('  1. Go to Input/Output Setup -> Channel Outputs');
-    console.log('  2. Add new output: HTTP Virtual Display');
-    console.log('  3. Set start channel to 1, channel count to 33');
-    console.log('  4. Enable the output');
+    console.log('  2. Add new output: MQTT');
+    console.log('  3. Set your desired start channel (e.g., 1 or 100)');
+    console.log('  4. Channel count: 3 (for RGB)');
+    console.log('  5. Configure MQTT broker (usually localhost:1883)');
+    console.log('  6. Set topic and payload pattern');
+    console.log('  7. Enable the output');
     console.log('='.repeat(60) + '\n');
     
-    // Connect to FPP's Virtual Display
-    connectToFPPVirtualDisplay();
+    // Connect to FPP's MQTT broker
+    connectToFPPMQTT();
     
     // Forward data to cloud periodically
     setInterval(() => {
