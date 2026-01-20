@@ -11,6 +11,7 @@ if (file_exists($settingsFile)) {
 $apiKey = isset($settings['apiKey']) ? $settings['apiKey'] : '';
 $cloudServerUrl = isset($settings['cloudServerUrl']) ? $settings['cloudServerUrl'] : 'http://your-cloud-server:3002';
 $universe = isset($settings['universe']) ? $settings['universe'] : '5';
+$modelName = isset($settings['modelName']) ? $settings['modelName'] : '';
 $enabled = isset($settings['enabled']) ? $settings['enabled'] : false;
 
 // Handle form submission
@@ -19,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'apiKey' => trim($_POST['apiKey']),
         'cloudServerUrl' => trim($_POST['cloudServerUrl']),
         'universe' => intval($_POST['universe']),
+        'modelName' => trim($_POST['modelName']),
         'enabled' => isset($_POST['enabled'])
     );
     
@@ -140,6 +142,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label for="universe">E1.31 Universe *</label>
             <input type="number" name="universe" id="universe" value="<?php echo $universe; ?>" min="1" max="63999" required>
             <div class="help-text">The universe to monitor for lighting data (default: 5)</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="modelName">Model/Element Name (Optional)</label>
+            <input type="text" name="modelName" id="modelName" value="<?php echo htmlspecialchars($modelName); ?>" placeholder="Leave blank to use Universe channels 1-33">
+            <div class="help-text">FPP model name to use for data. If specified, universe setting is ignored. Find model names at: Status/Control → Overlays → Models</div>
         </div>
         
         <button type="submit" class="btn-save">💾 Save Settings</button>

@@ -38,6 +38,7 @@ const API_SERVER_URL = settings.cloudServerUrl.replace(':3002', ':3001');
 const CLOUD_SERVER_URL = settings.cloudServerUrl;
 const API_KEY = settings.apiKey;
 const UNIVERSE = parseInt(settings.universe);
+const MODEL_NAME = settings.modelName || '';
 
 // FPP API configuration
 const FPP_API_URL = 'http://localhost';
@@ -141,10 +142,6 @@ function connectToCloud() {
 // Read channel data from FPP API
 async function readChannelData() {
     try {
-        // Calculate absolute channel numbers
-        const startChannel = ABSOLUTE_START_CHANNEL;
-        const endChannel = startChannel + 32; // Channels 1-33
-        
         // Poll FPP API for models data
         const response = await axios.get(`${FPP_API_URL}/api/models`, {
             timeout: 100
@@ -154,24 +151,39 @@ async function readChannelData() {
             return null;
         }
         
-        // Build a channel map from all models
-        const channelData = new Array(33).fill(0);
+        let channelData = new Array(33).fill(0);
         
-        for (const model of response.data) {
-            const modelStart = model.StartChannel;
-            const modelEnd = modelStart + model.ChannelCount - 1;
+        // If model name is specified, use that model
+        if (MODEL_NAME) {
+            const model = response.data.find(m => m.Name === MODEL_NAME);
+            if (model && model.data) {
+                const data = model.data.split(',');
+                // Take first 33 values from the model
+                for (let i = 0; i < Math.min(33, data.length); i++) {
+                    channelData[i] = parseInt(data[i]) || 0;
+                }
+            }
+        } else {
+            // Use universe-based channel mapping
+            const startChannel = ABSOLUTE_START_CHANNEL;
+            const endChannel = startChannel + 32; // Channels 1-33
             
-            // Check if this model overlaps our channels
-            if (modelEnd >= startChannel && modelStart <= endChannel) {
-                const data = model.data ? model.data.split(',') : [];
+            for (const model of response.data) {
+                const modelStart = model.StartChannel;
+                const modelEnd = modelStart + model.ChannelCount - 1;
                 
-                // Extract relevant channels
-                for (let i = 0; i < 33; i++) {
-                    const absChannel = startChannel + i;
-                    if (absChannel >= modelStart && absChannel <= modelEnd) {
-                        const dataIndex = absChannel - modelStart;
-                        if (dataIndex < data.length && data[dataIndex]) {
-                            channelData[i] = parseInt(data[dataIndex]) || 0;
+                // Check if this model overlaps our channels
+                if (modelEnd >= startChannel && modelStart <= endChannel) {
+                    const data = model.data ? model.data.split(',') : [];
+                    
+                    // Extract relevant channels
+                    for (let i = 0; i < 33; i++) {
+                        const absChannel = startChannel + i;
+                        if (absChannel >= modelStart && absChannel <= modelEnd) {
+                            const dataIndex = absChannel - modelStart;
+                            if (dataIndex < data.length && data[dataIndex]) {
+                                channelData[i] = parseInt(data[dataIndex]) || 0;
+                            }
                         }
                     }
                 }
@@ -194,8 +206,12 @@ function startChannelDataReader() {
     console.log('DDP MOBILE CLOUD CONNECTOR (FPP PLUGIN)');
     console.log('='.repeat(60));
     console.log(`Reading from: ${FPP_API_URL}/api/models`);
-    console.log(`Target universe: ${UNIVERSE}`);
-    console.log(`Absolute channels: ${ABSOLUTE_START_CHANNEL}-${ABSOLUTE_START_CHANNEL + 32}`);
+    if (MODEL_NAME) {
+        console.log(`Using model: ${MODEL_NAME}`);
+    } else {
+        console.log(`Target universe: ${UNIVERSE}`);
+        console.log(`Absolute channels: ${ABSOLUTE_START_CHANNEL}-${ABSOLUTE_START_CHANNEL + 32}`);
+    }
     console.log(`Show token: ${showToken}`);
     console.log(`Cloud server: ${CLOUD_SERVER_URL}`);
     console.log(`Polling interval: ${POLL_INTERVAL}ms`);
