@@ -10,6 +10,7 @@ if (file_exists($settingsFile)) {
 // Default values
 $apiKey = isset($settings['apiKey']) ? $settings['apiKey'] : '';
 $cloudServerUrl = isset($settings['cloudServerUrl']) ? $settings['cloudServerUrl'] : 'http://your-cloud-server:3002';
+$cloudMqttBroker = isset($settings['cloudMqttBroker']) ? $settings['cloudMqttBroker'] : 'mqtt://192.168.83.45:1883';
 $fppHost = isset($settings['fppHost']) ? $settings['fppHost'] : '127.0.0.1';
 $mqttBroker = isset($settings['mqttBroker']) ? $settings['mqttBroker'] : '';
 $mqttUsername = isset($settings['mqttUsername']) ? $settings['mqttUsername'] : '';
@@ -25,6 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $settings = array(
         'apiKey' => trim($_POST['apiKey']),
         'cloudServerUrl' => trim($_POST['cloudServerUrl']),
+        'cloudMqttBroker' => trim($_POST['cloudMqttBroker']),
         'fppHost' => trim($_POST['fppHost']),
         'mqttBroker' => trim($_POST['mqttBroker']),
         'mqttUsername' => trim($_POST['mqttUsername']),
@@ -55,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Reload settings
     $apiKey = $settings['apiKey'];
     $cloudServerUrl = $settings['cloudServerUrl'];
+    $cloudMqttBroker = $settings['cloudMqttBroker'];
     $fppHost = $settings['fppHost'];
     $mqttBroker = $settings['mqttBroker'];
     $mqttUsername = $settings['mqttUsername'];
@@ -157,39 +160,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         
         <div class="form-group">
+            <label for="cloudMqttBroker">Cloud MQTT Broker *</label>
+            <input type="text" name="cloudMqttBroker" id="cloudMqttBroker" value="<?php echo htmlspecialchars($cloudMqttBroker); ?>" required>
+            <div class="help-text">Cloud MQTT broker URL (e.g., mqtt://your-server.com:1883). Plugin bridges local MQTT to cloud.</div>
+        </div>
+        
+        <div class="form-group">
             <label for="fppHost">FPP Host IP *</label>
             <input type="text" name="fppHost" id="fppHost" value="<?php echo htmlspecialchars($fppHost); ?>" required>
             <div class="help-text">IP of FPP device (use 127.0.0.1 if plugin runs ON the FPP, or 192.168.x.x if running remotely)</div>
         </div>
         
+        <h3 style="margin-top: 30px; margin-bottom: 15px; border-bottom: 2px solid #ddd; padding-bottom: 10px;">Local MQTT Settings (Your FPP Setup)</h3>
+        
         <div class="form-group">
-            <label for="mqttBroker">MQTT Broker URL (Optional)</label>
+            <label for="mqttBroker">Local MQTT Broker URL (Optional)</label>
             <input type="text" name="mqttBroker" id="mqttBroker" value="<?php echo htmlspecialchars($mqttBroker); ?>">
             <div class="help-text">Leave blank to auto-detect from FPP settings, or specify manually (e.g., mqtt://192.168.1.100:1883)</div>
         </div>
         
         <div class="form-group">
-            <label for="mqttUsername">MQTT Username (Optional)</label>
+            <label for="mqttUsername">Local MQTT Username (Optional)</label>
             <input type="text" name="mqttUsername" id="mqttUsername" value="<?php echo htmlspecialchars($mqttUsername); ?>">
             <div class="help-text">Username for MQTT authentication (leave blank if not required)</div>
         </div>
         
         <div class="form-group">
-            <label for="mqttPassword">MQTT Password (Optional)</label>
+            <label for="mqttPassword">Local MQTT Password (Optional)</label>
             <input type="password" name="mqttPassword" id="mqttPassword" value="<?php echo htmlspecialchars($mqttPassword); ?>">
-            <div class="help-text">Password for MQTT authentication (leave blank if not required)</div>
+            <div class="help-text">Password for local MQTT authentication (leave blank if not required)</div>
         </div>
         
         <div class="form-group">
-            <label for="mqttTopicColor">MQTT Color Topic *</label>
+            <label for="mqttTopicColor">Local MQTT Color Topic *</label>
             <input type="text" name="mqttTopicColor" id="mqttTopicColor" value="<?php echo htmlspecialchars($mqttTopicColor); ?>" required>
-            <div class="help-text">MQTT topic for single main RGB color display (e.g., mobileLights)</div>
+            <div class="help-text">Local MQTT topic for main RGB color (e.g., mobileLights)</div>
         </div>
         
         <div class="form-group">
-            <label for="mqttTopicPixels">MQTT Pixel Topics (Optional)</label>
+            <label for="mqttTopicPixels">Local MQTT Pixel Topics (Optional)</label>
             <input type="text" name="mqttTopicPixels" id="mqttTopicPixels" value="<?php echo htmlspecialchars($mqttTopicPixels); ?>">
-            <div class="help-text">MQTT wildcard topic for 10 pixels (e.g., falcon/player/FPP/mobileLights/pixel/#). Use # for wildcard.</div>
+            <div class="help-text">Local MQTT wildcard topic for pixels (e.g., falcon/player/FPP/mobileLights/pixel/#)</div>
         </div>
         
         <div class="form-group">
