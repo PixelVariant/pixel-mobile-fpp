@@ -39,9 +39,10 @@ const CLOUD_SERVER_URL = settings.cloudServerUrl;
 const API_KEY = settings.apiKey;
 const UNIVERSE = parseInt(settings.universe);
 
-// FPP channel data configuration
-const CHANNEL_DATA_FILE = '/dev/shm/ChannelData';
+// FPP API configuration
+const FPP_API_URL = 'http://localhost';
 const UNIVERSE_SIZE = 512; // Standard DMX universe size
+const ABSOLUTE_START_CHANNEL = ((UNIVERSE - 1) * UNIVERSE_SIZE) + 1;
 const SINGLE_COLOR_CHANNEL = 1;
 const PIXELS_START_CHANNEL = 4;
 const NUM_PIXELS = 10;
@@ -137,21 +138,49 @@ function connectToCloud() {
     });
 }
 
-// Read channel data from FPP's shared memory
-function readChannelData() {
+// Read channel data from FPP API
+async function readChannelData() {
     try {
-        // Calculate byte offset for this universe
-        const universeOffset = (UNIVERSE - 1) * UNIVERSE_SIZE;
+        // Calculate absolute channel numbers
+        const startChannel = ABSOLUTE_START_CHANNEL;
+        const endChannel = startChannel + 32; // Channels 1-33
         
-        // Read the channel data file
-        const fd = fs.openSync(CHANNEL_DATA_FILE, 'r');
-        const buffer = Buffer.alloc(UNIVERSE_SIZE);
-        fs.readSync(fd, buffer, 0, UNIVERSE_SIZE, universeOffset);
-        fs.closeSync(fd);
+        // Poll FPP API for models data
+        const response = await axios.get(`${FPP_API_URL}/api/models`, {
+            timeout: 100
+        });
         
-        return buffer;
+        if (!response.data || !Array.isArray(response.data)) {
+            return null;
+        }
+        
+        // Build a channel map from all models
+        const channelData = new Array(33).fill(0);
+        
+        for (const model of response.data) {
+            const modelStart = model.StartChannel;
+            const modelEnd = modelStart + model.ChannelCount - 1;
+            
+            // Check if this model overlaps our channels
+            if (modelEnd >= startChannel && modelStart <= endChannel) {
+                const data = model.data ? model.data.split(',') : [];
+                
+                // Extract relevant channels
+                for (let i = 0; i < 33; i++) {
+                    const absChannel = startChannel + i;
+                    if (absChannel >= modelStart && absChannel <= modelEnd) {
+                        const dataIndex = absChannel - modelStart;
+                        if (dataIndex < data.length && data[dataIndex]) {
+                            channelData[i] = parseInt(data[dataIndex]) || 0;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return channelData;
     } catch (error) {
-        if (error.code !== 'ENOENT') {
+        if (error.code !== 'ECONNREFUSED') {
             console.error('Error reading channel data:', error.message);
             stats.errors++;
         }
@@ -159,21 +188,22 @@ function readChannelData() {
     }
 }
 
-// Start polling FPP channel data
+// Start polling FPP API
 function startChannelDataReader() {
     console.log('\n' + '='.repeat(60));
     console.log('DDP MOBILE CLOUD CONNECTOR (FPP PLUGIN)');
     console.log('='.repeat(60));
-    console.log(`Reading from: ${CHANNEL_DATA_FILE}`);
+    console.log(`Reading from: ${FPP_API_URL}/api/models`);
     console.log(`Target universe: ${UNIVERSE}`);
+    console.log(`Absolute channels: ${ABSOLUTE_START_CHANNEL}-${ABSOLUTE_START_CHANNEL + 32}`);
     console.log(`Show token: ${showToken}`);
     console.log(`Cloud server: ${CLOUD_SERVER_URL}`);
     console.log(`Polling interval: ${POLL_INTERVAL}ms`);
     console.log('='.repeat(60) + '\n');
     
-    setInterval(() => {
+    setInterval(async () => {
         try {
-            const channelData = readChannelData();
+            const channelData = await readChannelData();
             if (!channelData) {
                 return;
             }
