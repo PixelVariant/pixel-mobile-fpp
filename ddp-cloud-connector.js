@@ -158,9 +158,22 @@ async function readChannelData() {
             const model = response.data.find(m => m.Name === MODEL_NAME);
             if (model && model.data) {
                 const data = model.data.split(',');
+                
+                // Debug log every 100 packets
+                if (stats.packetsReceived % 100 === 0) {
+                    console.log(`\n=== FPP DATA DEBUG ===`);
+                    console.log(`Model: ${MODEL_NAME}`);
+                    console.log(`StartChannel: ${model.StartChannel}, ChannelCount: ${model.ChannelCount}`);
+                    console.log(`First 10 values from FPP: [${data.slice(0, 10).join(', ')}]`);
+                }
+                
                 // Take first 33 values from the model
                 for (let i = 0; i < Math.min(33, data.length); i++) {
                     channelData[i] = parseInt(data[i]) || 0;
+                }
+            } else {
+                if (stats.packetsReceived % 100 === 0) {
+                    console.log(`WARNING: Model "${MODEL_NAME}" not found or has no data`);
                 }
             }
         } else {
