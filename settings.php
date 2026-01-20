@@ -146,10 +146,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         <div class="form-group">
             <label for="modelName">Model/Element Name (Optional)</label>
-            <input type="text" name="modelName" id="modelName" value="<?php echo htmlspecialchars($modelName); ?>" placeholder="Leave blank to use Universe channels 1-33">
-            <div class="help-text">FPP model name to use for data. If specified, universe setting is ignored. Find model names at: Status/Control → Overlays → Models</div>
+            <select name="modelName" id="modelName">
+                <option value="">-- Use Universe Channels 1-33 --</option>
+            </select>
+            <div class="help-text">Select an FPP model/element to use for data. If selected, universe setting is ignored.</div>
         </div>
         
         <button type="submit" class="btn-save">💾 Save Settings</button>
     </form>
 </div>
+
+<script>
+    // Load available models from FPP
+    async function loadModels() {
+        try {
+            const response = await fetch('/api/models');
+            const models = await response.json();
+            
+            const select = document.getElementById('modelName');
+            const currentValue = '<?php echo addslashes($modelName); ?>';
+            
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.Name;
+                option.textContent = `${model.Name} (${model.Type}, ${model.ChannelCount} channels)`;
+                if (model.Name === currentValue) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Failed to load models:', error);
+            // Fallback to text input if API fails
+            const select = document.getElementById('modelName');
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.name = 'modelName';
+            input.id = 'modelName';
+            input.value = '<?php echo htmlspecialchars($modelName); ?>';
+            input.placeholder = 'Enter model name manually';
+            select.parentNode.replaceChild(input, select);
+        }
+    }
+    
+    // Load models when page loads
+    loadModels();
+</script>
