@@ -70,6 +70,26 @@ function saveStats() {
     }
 }
 
+// Get MQTT broker settings from FPP
+async function getMQTTBrokerFromFPP() {
+    try {
+        // Try to get MQTT settings from FPP API
+        const response = await axios.get(`http://${FPP_HOST}/api/settings`, {
+            timeout: 5000
+        });
+        
+        const mqttHost = response.data.MQTTHost || 'localhost';
+        const mqttPort = response.data.MQTTPort || 1883;
+        const mqttBroker = `mqtt://${mqttHost}:${mqttPort}`;
+        
+        console.log(`✓ Retrieved MQTT broker from FPP: ${mqttBroker}`);
+        return mqttBroker;
+    } catch (error) {
+        console.log(`Could not get MQTT broker from FPP (${error.message}), using configured value`);
+        return null;
+    }
+}
+
 // Validate API key and get show token
 async function initialize() {
     try {
@@ -85,6 +105,15 @@ async function initialize() {
         
         showToken = response.data.token;
         console.log(`✓ API key validated. Show token: ${showToken}`);
+        
+        // Get MQTT broker from FPP if not configured
+        if (!settings.mqttBroker || settings.mqttBroker === 'mqtt://localhost:1883') {
+            const fppMqttBroker = await getMQTTBrokerFromFPP();
+            if (fppMqttBroker) {
+                // Override with FPP's MQTT broker
+                global.MQTT_BROKER_OVERRIDE = fppMqttBroker;
+            }
+        }
         
         // Connect to cloud server
         connectToCloud();
@@ -144,10 +173,12 @@ let mqttClient = null;
 
 // Connect to FPP's MQTT broker and subscribe to channel data
 function connectToFPPMQTT() {
-    console.log(`Connecting to FPP MQTT broker at ${MQTT_BROKER}...`);
+    const brokerUrl = global.MQTT_BROKER_OVERRIDE || MQTT_BROKER;
+    
+    console.log(`Connecting to FPP MQTT broker at ${brokerUrl}...`);
     console.log(`Subscribing to topic: ${MQTT_TOPIC}`);
     
-    mqttClient = mqtt.connect(MQTT_BROKER, {
+    mqttClient = mqtt.connect(brokerUrl, {
         reconnectPeriod: 5000,
         connectTimeout: 10000
     });
@@ -238,12 +269,14 @@ function processMQTTMessage(message) {
 
 // Start sending data to cloud
 function startDataForwarder() {
+    const brokerUrl = global.MQTT_BROKER_OVERRIDE || MQTT_BROKER;
+    
     console.log('\n' + '='.repeat(60));
     console.log('FPP CLOUD CONNECTOR PLUGIN (MQTT)');
     console.log('='.repeat(60));
     console.log(`Show token: ${showToken}`);
     console.log(`Cloud server: ${CLOUD_SERVER_URL}`);
-    console.log(`MQTT Broker: ${MQTT_BROKER}`);
+    console.log(`MQTT Broker: ${brokerUrl}`);
     console.log(`MQTT Topic: ${MQTT_TOPIC}`);
     console.log(`Forward interval: ${FORWARD_INTERVAL}ms`);
     console.log('='.repeat(60));

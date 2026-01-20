@@ -154,9 +154,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         
         <div class="form-group">
-            <label for="mqttBroker">MQTT Broker URL *</label>
-            <input type="text" name="mqttBroker" id="mqttBroker" value="<?php echo htmlspecialchars($mqttBroker); ?>" required>
-            <div class="help-text">MQTT broker address (e.g., mqtt://192.168.1.100:1883 or mqtt://localhost:1883)</div>
+            <label for="mqttBroker">MQTT Broker URL (Optional)</label>
+            <input type="text" name="mqttBroker" id="mqttBroker" value="<?php echo htmlspecialchars($mqttBroker); ?>">
+            <div class="help-text">Leave blank to auto-detect from FPP settings, or specify manually (e.g., mqtt://192.168.1.100:1883)</div>
         </div>
         
         <div class="form-group">
