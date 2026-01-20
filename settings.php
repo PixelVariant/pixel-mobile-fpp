@@ -11,7 +11,9 @@ if (file_exists($settingsFile)) {
 $apiKey = isset($settings['apiKey']) ? $settings['apiKey'] : '';
 $cloudServerUrl = isset($settings['cloudServerUrl']) ? $settings['cloudServerUrl'] : 'http://your-cloud-server:3002';
 $fppHost = isset($settings['fppHost']) ? $settings['fppHost'] : '127.0.0.1';
-$mqttBroker = isset($settings['mqttBroker']) ? $settings['mqttBroker'] : 'mqtt://localhost:1883';
+$mqttBroker = isset($settings['mqttBroker']) ? $settings['mqttBroker'] : '';
+$mqttUsername = isset($settings['mqttUsername']) ? $settings['mqttUsername'] : '';
+$mqttPassword = isset($settings['mqttPassword']) ? $settings['mqttPassword'] : '';
 $mqttTopic = isset($settings['mqttTopic']) ? $settings['mqttTopic'] : 'falcon/player/FPP/channel/output/color';
 $universe = isset($settings['universe']) ? $settings['universe'] : '5';
 $modelName = isset($settings['modelName']) ? $settings['modelName'] : '';
@@ -24,6 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'cloudServerUrl' => trim($_POST['cloudServerUrl']),
         'fppHost' => trim($_POST['fppHost']),
         'mqttBroker' => trim($_POST['mqttBroker']),
+        'mqttUsername' => trim($_POST['mqttUsername']),
+        'mqttPassword' => trim($_POST['mqttPassword']),
         'mqttTopic' => trim($_POST['mqttTopic']),
         'universe' => intval($_POST['universe']),
         'modelName' => trim($_POST['modelName']),
@@ -51,6 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $cloudServerUrl = $settings['cloudServerUrl'];
     $fppHost = $settings['fppHost'];
     $mqttBroker = $settings['mqttBroker'];
+    $mqttUsername = $settings['mqttUsername'];
+    $mqttPassword = $settings['mqttPassword'];
     $mqttTopic = $settings['mqttTopic'];
     $universe = $settings['universe'];
     $enabled = $settings['enabled'];
@@ -157,6 +163,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label for="mqttBroker">MQTT Broker URL (Optional)</label>
             <input type="text" name="mqttBroker" id="mqttBroker" value="<?php echo htmlspecialchars($mqttBroker); ?>">
             <div class="help-text">Leave blank to auto-detect from FPP settings, or specify manually (e.g., mqtt://192.168.1.100:1883)</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="mqttUsername">MQTT Username (Optional)</label>
+            <input type="text" name="mqttUsername" id="mqttUsername" value="<?php echo htmlspecialchars($mqttUsername); ?>">
+            <div class="help-text">Username for MQTT authentication (leave blank if not required)</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="mqttPassword">MQTT Password (Optional)</label>
+            <input type="password" name="mqttPassword" id="mqttPassword" value="<?php echo htmlspecialchars($mqttPassword); ?>">
+            <div class="help-text">Password for MQTT authentication (leave blank if not required)</div>
         </div>
         
         <div class="form-group">

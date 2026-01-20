@@ -10,7 +10,9 @@ let settings = {
     apiKey: '',
     cloudServerUrl: 'http://localhost:3002',
     fppHost: '127.0.0.1',  // IP address of FPP (use 127.0.0.1 if running ON the FPP)
-    mqttBroker: 'mqtt://localhost:1883',  // MQTT broker URL
+    mqttBroker: '',  // MQTT broker URL (empty = auto-detect from FPP)
+    mqttUsername: '',  // MQTT username (optional)
+    mqttPassword: '',  // MQTT password (optional)
     mqttTopic: 'falcon/player/FPP/channel/output/color',  // MQTT topic
     enabled: false
 };
@@ -107,12 +109,14 @@ async function initialize() {
         console.log(`✓ API key validated. Show token: ${showToken}`);
         
         // Get MQTT broker from FPP if not configured
-        if (!settings.mqttBroker || settings.mqttBroker === 'mqtt://localhost:1883') {
+        if (!settings.mqttBroker || settings.mqttBroker.trim() === '') {
             const fppMqttBroker = await getMQTTBrokerFromFPP();
             if (fppMqttBroker) {
                 // Override with FPP's MQTT broker
                 global.MQTT_BROKER_OVERRIDE = fppMqttBroker;
             }
+        } else {
+            console.log(`Using configured MQTT broker: ${settings.mqttBroker}`);
         }
         
         // Connect to cloud server
@@ -178,10 +182,21 @@ function connectToFPPMQTT() {
     console.log(`Connecting to FPP MQTT broker at ${brokerUrl}...`);
     console.log(`Subscribing to topic: ${MQTT_TOPIC}`);
     
-    mqttClient = mqtt.connect(brokerUrl, {
+    const mqttOptions = {
         reconnectPeriod: 5000,
         connectTimeout: 10000
-    });
+    };
+    
+    // Add authentication if provided
+    if (settings.mqttUsername) {
+        mqttOptions.username = settings.mqttUsername;
+        console.log(`Using MQTT authentication (username: ${settings.mqttUsername})`);
+    }
+    if (settings.mqttPassword) {
+        mqttOptions.password = settings.mqttPassword;
+    }
+    
+    mqttClient = mqtt.connect(brokerUrl, mqttOptions);
     
     mqttClient.on('connect', () => {
         console.log('✓ Connected to FPP MQTT broker');
