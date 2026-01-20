@@ -42,7 +42,7 @@ const UNIVERSE = parseInt(settings.universe);
 const MODEL_NAME = settings.modelName || '';
 
 // E1.31 Listener configuration
-const E131_PORT = 5568;  // Standard E1.31 port
+const E131_PORT = 5569;  // Use alternate port (5568 is used by FPP)
 const POLL_INTERVAL = 40; // Process data every 40ms (~25 FPS)
 
 let showToken = null;
