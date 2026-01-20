@@ -139,81 +139,85 @@ function connectToCloud() {
     });
 }
 
-// Read channel data from FPP API
-async function readChannelData() {
+// Read channel data from FPP shared memory file
+function readChannelData() {
     try {
-        // Try different FPP API endpoints to get channel data
+        // FPP creates model-specific data files in /dev/shm/
+        let channelDataFile = null;
         
-        // Option 1: Try channeloutputs endpoint
-        try {
-            const outputResponse = await axios.get(`${FPP_API_URL}/api/channeloutputs`, {
-                timeout: 100
-            });
+        if (MODEL_NAME) {
+            // Convert model name to filename format (spaces to underscores)
+            const filename = MODEL_NAME.replace(/ /g, '_');
+            channelDataFile = `/dev/shm/FPP-Model-Data-${filename}`;
             
-            if (stats.packetsReceived === 1) {
-                console.log(`\n=== TESTING /api/channeloutputs ===`);
-                console.log(JSON.stringify(outputResponse.data, null, 2).substring(0, 500));
-                console.log(`===================================\n`);
-            }
-        } catch (e) {
-            if (stats.packetsReceived === 1) {
-                console.log(`/api/channeloutputs not available: ${e.message}`);
-            }
-        }
-        
-        // Option 2: Try fppd status
-        try {
-            const statusResponse = await axios.get(`${FPP_API_URL}/api/fppd/status`, {
-                timeout: 100
-            });
-            
-            if (stats.packetsReceived === 1) {
-                console.log(`\n=== TESTING /api/fppd/status ===`);
-                console.log(JSON.stringify(statusResponse.data, null, 2).substring(0, 500));
-                console.log(`===================================\n`);
-            }
-        } catch (e) {
-            if (stats.packetsReceived === 1) {
-                console.log(`/api/fppd/status not available: ${e.message}`);
-            }
-        }
-        
-        // Option 3: Try direct channel read with range
-        try {
-            const startCh = MODEL_NAME ? 1 : ABSOLUTE_START_CHANNEL;
-            const channelResponse = await axios.get(`${FPP_API_URL}/api/channel/${startCh}-${startCh + 32}`, {
-                timeout: 100
-            });
-            
-            if (stats.packetsReceived === 1) {
-                console.log(`\n=== TESTING /api/channel/${startCh}-${startCh + 32} ===`);
-                console.log(JSON.stringify(channelResponse.data, null, 2));
-                console.log(`===================================\n`);
-            }
-            
-            // If this works, parse the response
-            if (channelResponse.data) {
-                let channelData = new Array(33).fill(0);
-                // Response might be an array or object, handle both
-                if (Array.isArray(channelResponse.data)) {
-                    channelResponse.data.forEach((val, idx) => {
-                        if (idx < 33) channelData[idx] = val;
-                    });
+            if (!fs.existsSync(channelDataFile)) {
+                if (stats.packetsReceived % 100 === 0) {
+                    console.log(`\nWARNING: Model data file not found: ${channelDataFile}`);
+                    console.log(`Make sure model "${MODEL_NAME}" exists and is being used.\n`);
                 }
-                
-                if (stats.packetsReceived % 100 === 0 && channelData.some(v => v > 0)) {
-                    console.log(`Channel data found: [${channelData.slice(0, 10).join(', ')}]`);
-                }
-                
-                return channelData;
+                return null;
             }
-        } catch (e) {
-            if (stats.packetsReceived === 1) {
-                console.log(`/api/channel/range not available: ${e.message}`);
+        } else {
+            // Without a model name, we'd need to read the main channel data file
+            channelDataFile = '/dev/shm/FPP-ChannelData';
+            
+            if (!fs.existsSync(channelDataFile)) {
+                if (stats.packetsReceived % 100 === 0) {
+                    console.log(`\nWARNING: Channel data file not found. Please specify a model name.\n`);
+                }
+                return null;
             }
         }
         
-        // Fallback to models API
+        return readFromFile(channelDataFile);
+    } catch (error) {
+        if (stats.packetsReceived % 1000 === 0) {
+            console.error('Error reading channel data:', error.message);
+        }
+        return null;
+    }
+}
+
+function readFromFile(filePath) {
+    try {
+        const buffer = fs.readFileSync(filePath);
+        let channelData = new Array(33).fill(0);
+        
+        if (stats.packetsReceived === 1) {
+            console.log(`\n=== READING FROM ${filePath} ===`);
+            console.log(`File size: ${buffer.length} bytes`);
+        }
+        
+        // Read first 33 bytes (FPP model data files contain raw channel values)
+        for (let i = 0; i < Math.min(33, buffer.length); i++) {
+            channelData[i] = buffer[i];
+        }
+        
+        if (stats.packetsReceived === 1) {
+            console.log(`Reading first 33 bytes as RGB channels`);
+            console.log(`First 10 values: [${channelData.slice(0, 10).join(', ')}]`);
+            console.log(`================================\n`);
+        }
+        
+        // Log non-zero data occasionally
+        if (stats.packetsReceived % 100 === 0) {
+            const hasData = channelData.some(v => v > 0);
+            if (hasData) {
+                console.log(`✓ Reading live data: R=${channelData[0]} G=${channelData[1]} B=${channelData[2]} [${channelData.slice(0, 10).join(', ')}]`);
+            } else if (stats.packetsReceived % 500 === 0) {
+                console.log(`No data (all zeros) - is sequence playing and affecting this model?`);
+            }
+        }
+        
+        return channelData;
+    } catch (error) {
+        throw error;
+    }
+}
+
+// Old API-based function (keeping for reference but not used)
+async function readChannelDataFromAPI() {
+    try {
         const response = await axios.get(`${FPP_API_URL}/api/models`, {
             timeout: 100
         });
@@ -311,7 +315,7 @@ function startChannelDataReader() {
     console.log('\n' + '='.repeat(60));
     console.log('DDP MOBILE CLOUD CONNECTOR (FPP PLUGIN)');
     console.log('='.repeat(60));
-    console.log(`Reading from: ${FPP_API_URL}/api/models`);
+    console.log(`Reading from: FPP channel memory`);
     if (MODEL_NAME) {
         console.log(`Using model: ${MODEL_NAME}`);
     } else {
@@ -323,9 +327,9 @@ function startChannelDataReader() {
     console.log(`Polling interval: ${POLL_INTERVAL}ms`);
     console.log('='.repeat(60) + '\n');
     
-    setInterval(async () => {
+    setInterval(() => {
         try {
-            const channelData = await readChannelData();
+            const channelData = readChannelData();
             if (!channelData) {
                 return;
             }
