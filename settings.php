@@ -10,6 +10,7 @@ if (file_exists($settingsFile)) {
 // Default values
 $apiKey = isset($settings['apiKey']) ? $settings['apiKey'] : '';
 $cloudServerUrl = isset($settings['cloudServerUrl']) ? $settings['cloudServerUrl'] : 'http://your-cloud-server:3002';
+$fppHost = isset($settings['fppHost']) ? $settings['fppHost'] : '127.0.0.1';
 $universe = isset($settings['universe']) ? $settings['universe'] : '5';
 $modelName = isset($settings['modelName']) ? $settings['modelName'] : '';
 $enabled = isset($settings['enabled']) ? $settings['enabled'] : false;
@@ -19,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $settings = array(
         'apiKey' => trim($_POST['apiKey']),
         'cloudServerUrl' => trim($_POST['cloudServerUrl']),
+        'fppHost' => trim($_POST['fppHost']),
         'universe' => intval($_POST['universe']),
         'modelName' => trim($_POST['modelName']),
         'enabled' => isset($_POST['enabled'])
@@ -43,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Reload settings
     $apiKey = $settings['apiKey'];
     $cloudServerUrl = $settings['cloudServerUrl'];
+    $fppHost = $settings['fppHost'];
     $universe = $settings['universe'];
     $enabled = $settings['enabled'];
 }
@@ -136,6 +139,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label for="cloudServerUrl">Cloud Server URL *</label>
             <input type="text" name="cloudServerUrl" id="cloudServerUrl" value="<?php echo htmlspecialchars($cloudServerUrl); ?>" required>
             <div class="help-text">The WebSocket server URL (e.g., http://your-server.com:3002)</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="fppHost">FPP Host IP *</label>
+            <input type="text" name="fppHost" id="fppHost" value="<?php echo htmlspecialchars($fppHost); ?>" required>
+            <div class="help-text">IP of FPP device (use 127.0.0.1 if plugin runs ON the FPP, or 192.168.x.x if running remotely)</div>
         </div>
         
         <div class="form-group">

@@ -9,6 +9,7 @@ const settingsFile = path.join(__dirname, 'settings', 'config.json');
 let settings = {
     apiKey: '',
     cloudServerUrl: 'http://localhost:3002',
+    fppHost: '127.0.0.1',  // IP address of FPP (use 127.0.0.1 if running ON the FPP)
     enabled: false
 };
 
@@ -40,7 +41,7 @@ const API_KEY = settings.apiKey;
 
 // FPP HTTP Virtual Display configuration
 const FPP_VIRTUAL_DISPLAY_PORT = 32328;  // FPP's HTTPVirtualDisplay port
-const FPP_HOST = '127.0.0.1';
+const FPP_HOST = settings.fppHost || '127.0.0.1';  // From settings, default to localhost
 const FORWARD_INTERVAL = 40; // Forward data every 40ms (~25 FPS)
 
 let showToken = null;
