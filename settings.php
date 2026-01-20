@@ -14,7 +14,7 @@ $fppHost = isset($settings['fppHost']) ? $settings['fppHost'] : '127.0.0.1';
 $mqttBroker = isset($settings['mqttBroker']) ? $settings['mqttBroker'] : '';
 $mqttUsername = isset($settings['mqttUsername']) ? $settings['mqttUsername'] : '';
 $mqttPassword = isset($settings['mqttPassword']) ? $settings['mqttPassword'] : '';
-$mqttTopicColor = isset($settings['mqttTopicColor']) ? $settings['mqttTopicColor'] : 'falcon/player/FPP/channel/output/color';
+$mqttTopicColor = isset($settings['mqttTopicColor']) ? $settings['mqttTopicColor'] : 'mobileLights';
 $mqttTopicPixels = isset($settings['mqttTopicPixels']) ? $settings['mqttTopicPixels'] : 'falcon/player/FPP/mobileLights/pixel/#';
 $universe = isset($settings['universe']) ? $settings['universe'] : '5';
 $modelName = isset($settings['modelName']) ? $settings['modelName'] : '';
@@ -183,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="form-group">
             <label for="mqttTopicColor">MQTT Color Topic *</label>
             <input type="text" name="mqttTopicColor" id="mqttTopicColor" value="<?php echo htmlspecialchars($mqttTopicColor); ?>" required>
-            <div class="help-text">MQTT topic for main RGB color (e.g., falcon/player/FPP/channel/output/color)</div>
+            <div class="help-text">MQTT topic for single main RGB color display (e.g., mobileLights)</div>
         </div>
         
         <div class="form-group">

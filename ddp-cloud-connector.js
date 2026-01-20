@@ -13,8 +13,8 @@ let settings = {
     mqttBroker: '',
     mqttUsername: '',
     mqttPassword: '',
-    mqttTopicColor: 'falcon/player/FPP/channel/output/color',  // Single color topic
-    mqttTopicPixels: 'falcon/player/FPP/mobileLights/pixel/#',  // Wildcard for pixels (e.g., falcon/player/FPP/mobileLights/pixel/1, pixel/2, etc.)
+    mqttTopicColor: 'mobileLights',  // Single color topic for cloud-display.html
+    mqttTopicPixels: 'falcon/player/FPP/mobileLights/pixel/#',  // Wildcard for pixels for cloud-pixels.html (e.g., falcon/player/FPP/mobileLights/pixel/1, pixel/2, etc.)
     enabled: false
 };
 
@@ -46,7 +46,7 @@ const API_KEY = settings.apiKey;
 
 // FPP MQTT configuration
 const MQTT_BROKER = settings.mqttBroker || `mqtt://${settings.fppHost || '127.0.0.1'}:1883`;
-const MQTT_TOPIC_COLOR = settings.mqttTopicColor || 'falcon/player/FPP/channel/output/color';
+const MQTT_TOPIC_COLOR = settings.mqttTopicColor || 'mobileLights';
 const MQTT_TOPIC_PIXELS = settings.mqttTopicPixels || 'falcon/player/FPP/mobileLights/pixel/#';
 const FPP_HOST = settings.fppHost || '127.0.0.1';
 const FORWARD_INTERVAL = 40; // Forward data every 40ms (~25 FPS)
@@ -331,11 +331,11 @@ function startDataForwarder() {
     console.log(`Forward interval: ${FORWARD_INTERVAL}ms`);
     console.log('='.repeat(60));
     console.log('\nMQTT Output Configuration in FPP:');
-    console.log('  Main Color (channels 1-3):');
+    console.log('  Main Color (single pixel for cloud-display.html):');
     console.log(`    Topic: ${MQTT_TOPIC_COLOR}`);
     console.log('    Payload: %R%,%G%,%B%');
     console.log('  ');
-    console.log('  Pixels (10 outputs):');
+    console.log('  Pixels (10 outputs for cloud-pixels.html):');
     console.log('    Pixel 1 (channels 9491-9493): falcon/player/FPP/mobileLights/pixel/1');
     console.log('    Pixel 2 (channels 9494-9496): falcon/player/FPP/mobileLights/pixel/2');
     console.log('    ...');

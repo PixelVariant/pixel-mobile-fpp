@@ -26,7 +26,7 @@ if ($action === 'auto-configure-mqtt') {
     $mqttBroker = $data['mqttBroker'] ?? '';
     $mqttUsername = $data['mqttUsername'] ?? '';
     $mqttPassword = $data['mqttPassword'] ?? '';
-    $mqttTopicColor = $data['mqttTopicColor'] ?? 'falcon/player/FPP/channel/output/color';
+    $mqttTopicColor = $data['mqttTopicColor'] ?? 'mobileLights';
     $mqttTopicPixels = $data['mqttTopicPixels'] ?? 'falcon/player/FPP/mobileLights/pixel/#';
 
     if (empty($modelName)) {
