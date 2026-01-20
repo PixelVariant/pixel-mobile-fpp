@@ -252,6 +252,13 @@ function startChannelDataReader() {
                     pixels: pixels
                 });
                 stats.packetsSent++;
+                
+                // Debug log every 100 packets
+                if (stats.packetsSent % 100 === 0) {
+                    console.log(`Sent packet ${stats.packetsSent}, connected: ${cloudSocket.connected}`);
+                }
+            } else {
+                console.log('Socket not connected, cannot send data');
             }
             
         } catch (error) {
