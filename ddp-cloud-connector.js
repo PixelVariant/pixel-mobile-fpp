@@ -155,11 +155,13 @@ async function readChannelData() {
         if (stats.packetsReceived % 100 === 0) {
             console.log(`\n=== AVAILABLE MODELS FROM FPP ===`);
             console.log(`Total models: ${response.data.length}`);
-            response.data.slice(0, 10).forEach(m => {
-                console.log(`  - "${m.Name}" (Ch ${m.StartChannel}, Count: ${m.ChannelCount})`);
+            response.data.slice(0, 5).forEach(m => {
+                const hasData = m.data && m.data.length > 0;
+                const dataPreview = hasData ? m.data.split(',').slice(0, 5).join(',') : 'NO DATA';
+                console.log(`  - "${m.Name}" (Ch ${m.StartChannel}, Count: ${m.ChannelCount}) Data: [${dataPreview}${hasData ? '...' : ''}]`);
             });
-            if (response.data.length > 10) {
-                console.log(`  ... and ${response.data.length - 10} more`);
+            if (response.data.length > 5) {
+                console.log(`  ... and ${response.data.length - 5} more`);
             }
             console.log(`================================\n`);
         }
