@@ -10,6 +10,8 @@ let settings = {
     apiKey: '',
     cloudServerUrl: 'http://localhost:3002',
     fppHost: '127.0.0.1',  // IP address of FPP (use 127.0.0.1 if running ON the FPP)
+    mqttBroker: 'mqtt://localhost:1883',  // MQTT broker URL
+    mqttTopic: 'falcon/player/FPP/channel/output/color',  // MQTT topic
     enabled: false
 };
 
@@ -40,7 +42,7 @@ const CLOUD_SERVER_URL = settings.cloudServerUrl;
 const API_KEY = settings.apiKey;
 
 // FPP MQTT configuration
-const MQTT_BROKER = `mqtt://${settings.fppHost || '127.0.0.1'}:1883`;
+const MQTT_BROKER = settings.mqttBroker || `mqtt://${settings.fppHost || '127.0.0.1'}:1883`;
 const MQTT_TOPIC = settings.mqttTopic || 'falcon/player/FPP/channel/output/color';
 const FPP_HOST = settings.fppHost || '127.0.0.1';
 const FORWARD_INTERVAL = 40; // Forward data every 40ms (~25 FPS)

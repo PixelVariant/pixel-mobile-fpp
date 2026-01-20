@@ -11,6 +11,7 @@ if (file_exists($settingsFile)) {
 $apiKey = isset($settings['apiKey']) ? $settings['apiKey'] : '';
 $cloudServerUrl = isset($settings['cloudServerUrl']) ? $settings['cloudServerUrl'] : 'http://your-cloud-server:3002';
 $fppHost = isset($settings['fppHost']) ? $settings['fppHost'] : '127.0.0.1';
+$mqttBroker = isset($settings['mqttBroker']) ? $settings['mqttBroker'] : 'mqtt://localhost:1883';
 $mqttTopic = isset($settings['mqttTopic']) ? $settings['mqttTopic'] : 'falcon/player/FPP/channel/output/color';
 $universe = isset($settings['universe']) ? $settings['universe'] : '5';
 $modelName = isset($settings['modelName']) ? $settings['modelName'] : '';
@@ -22,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'apiKey' => trim($_POST['apiKey']),
         'cloudServerUrl' => trim($_POST['cloudServerUrl']),
         'fppHost' => trim($_POST['fppHost']),
+        'mqttBroker' => trim($_POST['mqttBroker']),
         'mqttTopic' => trim($_POST['mqttTopic']),
         'universe' => intval($_POST['universe']),
         'modelName' => trim($_POST['modelName']),
@@ -48,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $apiKey = $settings['apiKey'];
     $cloudServerUrl = $settings['cloudServerUrl'];
     $fppHost = $settings['fppHost'];
+    $mqttBroker = $settings['mqttBroker'];
     $mqttTopic = $settings['mqttTopic'];
     $universe = $settings['universe'];
     $enabled = $settings['enabled'];
@@ -148,6 +151,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <label for="fppHost">FPP Host IP *</label>
             <input type="text" name="fppHost" id="fppHost" value="<?php echo htmlspecialchars($fppHost); ?>" required>
             <div class="help-text">IP of FPP device (use 127.0.0.1 if plugin runs ON the FPP, or 192.168.x.x if running remotely)</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="mqttBroker">MQTT Broker URL *</label>
+            <input type="text" name="mqttBroker" id="mqttBroker" value="<?php echo htmlspecialchars($mqttBroker); ?>" required>
+            <div class="help-text">MQTT broker address (e.g., mqtt://192.168.1.100:1883 or mqtt://localhost:1883)</div>
         </div>
         
         <div class="form-group">
